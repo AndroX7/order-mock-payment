@@ -1,0 +1,8 @@
+bin/
+tmp/
+*.env
+!.env.example
+.vscode/
+.idea/
+*.log
+coverage.out
