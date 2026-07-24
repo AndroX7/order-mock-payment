@@ -12,11 +12,8 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/payment"
 )
 
-// SignatureHeader is the HTTP header carrying the hex-encoded HMAC-SHA256 signature.
 const SignatureHeader = "X-Signature"
 
-// Domain-specific API error codes returned by this handler.
-// Cross-cutting codes (INVALID_REQUEST, INTERNAL_ERROR) live in httpresp.
 const (
 	CodeInvalidSignature        = "INVALID_SIGNATURE"
 	CodeInvalidStatus           = "INVALID_STATUS"
@@ -24,7 +21,6 @@ const (
 	CodeInvalidStatusTransition = "INVALID_STATUS_TRANSITION"
 )
 
-// webhookService is the minimal surface Handler needs.
 type webhookService interface {
 	Process(ctx context.Context, payload []byte, signature string) error
 }
@@ -37,7 +33,6 @@ func NewHandler(svc webhookService) *Handler {
 	return &Handler{svc: svc}
 }
 
-// Callback handles POST /webhooks/payment.
 func (h *Handler) Callback(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {

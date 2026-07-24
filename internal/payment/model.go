@@ -7,14 +7,12 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// Status values persisted in the payments table.
 const (
 	StatusPending = "pending"
 	StatusPaid    = "paid"
 	StatusFailed  = "failed"
 )
 
-// Payment is the domain type persisted in the payments table.
 type Payment struct {
 	ID                uuid.UUID       `db:"id"`
 	OrderID           uuid.UUID       `db:"order_id"`

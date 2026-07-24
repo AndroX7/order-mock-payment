@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// UploadResponse is the client-facing view of an Upload.
 type UploadResponse struct {
 	ID          uuid.UUID `json:"id"`
 	OrderID     uuid.UUID `json:"order_id"`

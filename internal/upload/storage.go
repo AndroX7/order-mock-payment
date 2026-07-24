@@ -11,15 +11,10 @@ import (
 	"time"
 )
 
-// Storage persists an uploaded file and returns a relative path that can
-// be stored in the database. The concrete implementation may write to
-// local disk, object storage, etc.
 type Storage interface {
 	Save(ctx context.Context, file multipart.File, filename string) (string, error)
 }
 
-// LocalStorage writes uploads to a date-partitioned directory tree
-// rooted at baseDir. Paths returned are relative to baseDir.
 type LocalStorage struct {
 	baseDir string
 }
@@ -28,9 +23,6 @@ func NewLocalStorage(baseDir string) *LocalStorage {
 	return &LocalStorage{baseDir: baseDir}
 }
 
-// Save writes file to baseDir/YYYY/MM/DD/filename and returns the
-// relative path (YYYY/MM/DD/filename). filename must not contain path
-// separators or "..".
 func (s *LocalStorage) Save(_ context.Context, file multipart.File, filename string) (string, error) {
 	if !isSafeFilename(filename) {
 		return "", ErrInvalidStoragePath
@@ -52,8 +44,6 @@ func (s *LocalStorage) Save(_ context.Context, file multipart.File, filename str
 	if err != nil {
 		return "", fmt.Errorf("resolve full path: %w", err)
 	}
-	// Defense-in-depth: even though filename is generated server-side,
-	// verify the final path stays under baseDir.
 	if !strings.HasPrefix(fullAbs, baseAbs+string(filepath.Separator)) {
 		return "", ErrInvalidStoragePath
 	}
@@ -66,7 +56,6 @@ func (s *LocalStorage) Save(_ context.Context, file multipart.File, filename str
 	if err != nil {
 		return "", fmt.Errorf("create file: %w", err)
 	}
-	// Copy first, then close, then decide.
 	_, copyErr := io.Copy(out, file)
 	closeErr := out.Close()
 	if copyErr != nil {
@@ -80,9 +69,6 @@ func (s *LocalStorage) Save(_ context.Context, file multipart.File, filename str
 	return rel, nil
 }
 
-// isSafeFilename returns true iff filename contains no path separators
-// and no ".." segments. Filenames are generated server-side, but the
-// storage layer verifies its own inputs.
 func isSafeFilename(name string) bool {
 	if name == "" {
 		return false

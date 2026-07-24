@@ -7,13 +7,10 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// CreatePaymentRequest is the JSON payload for POST /api/v1/payments.
-// Amount is derived server-side from the order — clients cannot supply it.
 type CreatePaymentRequest struct {
 	OrderID uuid.UUID `json:"order_id"`
 }
 
-// PaymentResponse is the client-facing view of a Payment.
 type PaymentResponse struct {
 	ID                uuid.UUID       `json:"id"`
 	OrderID           uuid.UUID       `json:"order_id"`

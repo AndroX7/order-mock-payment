@@ -10,14 +10,11 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// Repository is the minimal persistence surface the auth service needs.
-// Kept small on purpose — no generic CRUD, no anticipation of future callers.
 type Repository interface {
 	Create(ctx context.Context, u *User) error
 	GetByEmail(ctx context.Context, email string) (*User, error)
 }
 
-// PostgresRepository is the sqlx-backed implementation of Repository.
 type PostgresRepository struct {
 	db *sqlx.DB
 }
@@ -32,8 +29,6 @@ VALUES ($1, $2, $3)
 RETURNING id, created_at, updated_at
 `
 
-// Create inserts a new user and populates u.ID, u.CreatedAt, u.UpdatedAt
-// from the database. Returns ErrEmailAlreadyExists on a unique-email conflict.
 func (r *PostgresRepository) Create(ctx context.Context, u *User) error {
 	err := r.db.QueryRowxContext(ctx, createUserQuery, u.Email, u.PasswordHash, u.Name).
 		Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt)
@@ -52,7 +47,6 @@ FROM users
 WHERE email = $1
 `
 
-// GetByEmail returns the user with the given email, or ErrUserNotFound.
 func (r *PostgresRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
 	var u User
 	if err := r.db.GetContext(ctx, &u, getByEmailQuery, email); err != nil {
@@ -64,7 +58,6 @@ func (r *PostgresRepository) GetByEmail(ctx context.Context, email string) (*Use
 	return &u, nil
 }
 
-// pgUniqueViolationCode is PostgreSQL SQLSTATE 23505 (unique_violation).
 const pgUniqueViolationCode = "23505"
 
 func isUniqueViolation(err error) bool {

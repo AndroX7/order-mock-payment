@@ -12,9 +12,6 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/middleware"
 )
 
-// Domain-specific API error codes. Cross-cutting codes
-// (INVALID_REQUEST, INVALID_CONTENT_TYPE, UNAUTHORIZED, INTERNAL_ERROR)
-// live in httpresp.
 const (
 	CodeInvalidSymbol   = "INVALID_SYMBOL"
 	CodeInvalidSide     = "INVALID_SIDE"
@@ -23,8 +20,6 @@ const (
 	CodeOrderNotFound   = "ORDER_NOT_FOUND"
 )
 
-// OrderService is the minimal service surface Handler requires.
-// Consumer-owned interface; concrete *Service satisfies it.
 type OrderService interface {
 	Create(ctx context.Context, userID uuid.UUID, req CreateOrderRequest) (*Order, error)
 	Get(ctx context.Context, userID, orderID uuid.UUID) (*Order, error)
@@ -33,7 +28,6 @@ type OrderService interface {
 	Delete(ctx context.Context, userID, orderID uuid.UUID) error
 }
 
-// Handler serves HTTP requests for the order resource.
 type Handler struct {
 	svc OrderService
 }
@@ -42,7 +36,6 @@ func NewHandler(svc OrderService) *Handler {
 	return &Handler{svc: svc}
 }
 
-// Create handles POST /api/v1/orders.
 func (h *Handler) Create(c *gin.Context) {
 	userID, ok := middleware.RequireUserID(c)
 	if !ok {
@@ -67,7 +60,6 @@ func (h *Handler) Create(c *gin.Context) {
 	httpresp.Success(c, http.StatusCreated, gin.H{"order": NewOrderResponse(order)})
 }
 
-// Get handles GET /api/v1/orders/:id.
 func (h *Handler) Get(c *gin.Context) {
 	userID, ok := middleware.RequireUserID(c)
 	if !ok {
@@ -86,7 +78,6 @@ func (h *Handler) Get(c *gin.Context) {
 	httpresp.Success(c, http.StatusOK, gin.H{"order": NewOrderResponse(order)})
 }
 
-// List handles GET /api/v1/orders.
 func (h *Handler) List(c *gin.Context) {
 	userID, ok := middleware.RequireUserID(c)
 	if !ok {
@@ -105,7 +96,6 @@ func (h *Handler) List(c *gin.Context) {
 	httpresp.Success(c, http.StatusOK, gin.H{"orders": out})
 }
 
-// Update handles PUT /api/v1/orders/:id.
 func (h *Handler) Update(c *gin.Context) {
 	userID, ok := middleware.RequireUserID(c)
 	if !ok {
@@ -134,7 +124,6 @@ func (h *Handler) Update(c *gin.Context) {
 	httpresp.Success(c, http.StatusOK, gin.H{"order": NewOrderResponse(order)})
 }
 
-// Delete handles DELETE /api/v1/orders/:id.
 func (h *Handler) Delete(c *gin.Context) {
 	userID, ok := middleware.RequireUserID(c)
 	if !ok {
@@ -152,7 +141,6 @@ func (h *Handler) Delete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// mapDomainError converts a service/repo error into (HTTP status, API code, safe message).
 func mapDomainError(err error) (int, string, string) {
 	switch {
 	case errors.Is(err, ErrInvalidSymbol):

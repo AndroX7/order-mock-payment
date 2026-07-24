@@ -13,12 +13,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// Integration tests for PostgresRepository. Skipped unless TEST_POSTGRES_DSN
-// is set.
-//
-//   TEST_POSTGRES_DSN='postgres://app:app@localhost:5432/order_mock_payment?sslmode=disable' \
-//     go test ./internal/payment/... -run PostgresRepository
-
 func openTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 	dsn := os.Getenv("TEST_POSTGRES_DSN")
@@ -35,7 +29,6 @@ func openTestDB(t *testing.T) *sqlx.DB {
 	return db
 }
 
-// seed a user + order and register cleanup. Returns the orderID.
 func seedOrder(t *testing.T, db *sqlx.DB) uuid.UUID {
 	t.Helper()
 	userID := uuid.New()
@@ -122,13 +115,11 @@ func TestPostgresRepository_DuplicatePayment(t *testing.T) {
 
 	orderID := seedOrder(t, db)
 
-	// First payment succeeds.
 	first := newPayment(orderID)
 	if err := repo.Create(ctx, first); err != nil {
 		t.Fatalf("first Create: %v", err)
 	}
 
-	// Second payment for the same order violates UNIQUE(order_id).
 	second := newPayment(orderID)
 	second.ProviderReference = "PAY-000002"
 	if err := repo.Create(ctx, second); !errors.Is(err, ErrDuplicatePayment) {

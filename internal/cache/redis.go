@@ -1,4 +1,3 @@
-// Package cache bootstraps the Redis client used for caching and rate limiting.
 package cache
 
 import (
@@ -10,12 +9,10 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/config"
 )
 
-// Redis owns the go-redis client. Callers use the client directly.
 type Redis struct {
 	Client *redis.Client
 }
 
-// New creates a Redis client and verifies connectivity with a ping.
 func New(ctx context.Context, cfg config.Redis) (*Redis, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:        cfg.Addr,
@@ -32,7 +29,6 @@ func New(ctx context.Context, cfg config.Redis) (*Redis, error) {
 	return &Redis{Client: client}, nil
 }
 
-// HealthCheck verifies Redis is reachable. Callers should pass a bounded context.
 func (r *Redis) HealthCheck(ctx context.Context) error {
 	return r.Client.Ping(ctx).Err()
 }

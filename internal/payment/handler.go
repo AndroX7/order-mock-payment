@@ -12,9 +12,6 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/middleware"
 )
 
-// Domain-specific API error codes. Cross-cutting codes
-// (INVALID_REQUEST, INVALID_CONTENT_TYPE, UNAUTHORIZED, INTERNAL_ERROR)
-// live in httpresp.
 const (
 	CodeOrderNotFound    = "ORDER_NOT_FOUND"
 	CodeOrderNotPayable  = "ORDER_NOT_PAYABLE"
@@ -23,7 +20,6 @@ const (
 	CodePaymentNotFound  = "PAYMENT_NOT_FOUND"
 )
 
-// PaymentService is the minimal service surface the Handler requires.
 type PaymentService interface {
 	Create(ctx context.Context, userID, orderID uuid.UUID) (*Payment, error)
 	Get(ctx context.Context, userID, paymentID uuid.UUID) (*Payment, error)
@@ -37,7 +33,6 @@ func NewHandler(svc PaymentService) *Handler {
 	return &Handler{svc: svc}
 }
 
-// Create handles POST /api/v1/payments.
 func (h *Handler) Create(c *gin.Context) {
 	userID, ok := middleware.RequireUserID(c)
 	if !ok {
@@ -66,7 +61,6 @@ func (h *Handler) Create(c *gin.Context) {
 	httpresp.Success(c, http.StatusCreated, gin.H{"payment": NewPaymentResponse(p)})
 }
 
-// Get handles GET /api/v1/payments/:id.
 func (h *Handler) Get(c *gin.Context) {
 	userID, ok := middleware.RequireUserID(c)
 	if !ok {

@@ -1,4 +1,3 @@
-// Package config loads and validates all runtime configuration.
 package config
 
 import (
@@ -45,9 +44,6 @@ type Postgres struct {
 	ConnMaxIdleTime time.Duration
 }
 
-// DSN returns a URL-form connection string. url.UserPassword handles
-// percent-encoding, so passwords with '@', ' ', or other special characters
-// are safe.
 func (p Postgres) DSN() string {
 	u := &url.URL{
 		Scheme: "postgres",
@@ -82,14 +78,11 @@ type Upload struct {
 	MaxSize int64
 }
 
-// Load reads configuration from environment variables (and .env if present),
-// applies defaults, and validates.
 func Load() (*Config, error) {
 	v := viper.New()
 	v.AutomaticEnv()
 	setDefaults(v)
 
-	// .env is optional: env vars take over in production.
 	if _, err := os.Stat(".env"); err == nil {
 		v.SetConfigFile(".env")
 		v.SetConfigType("env")
@@ -166,8 +159,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("REDIS_DB", 0)
 	v.SetDefault("REDIS_DIAL_TIMEOUT", 5*time.Second)
 
-	// JWT_SECRET has no default: operators must provide one. Validation rejects
-	// secrets shorter than 32 bytes.
 	v.SetDefault("JWT_TTL", 24*time.Hour)
 
 	v.SetDefault("UPLOAD_BASE_DIR", "./uploads")

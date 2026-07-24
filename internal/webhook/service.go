@@ -10,14 +10,10 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/payment"
 )
 
-// SignatureVerifier verifies that a payload came from an authentic provider.
-// Consumer-owned interface; HMACSignatureVerifier satisfies it.
 type SignatureVerifier interface {
 	Verify(payload []byte, signature string) error
 }
 
-// HMACSignatureVerifier verifies hex-encoded HMAC-SHA256 signatures.
-// The signature is HMAC-SHA256(secret, raw request body).
 type HMACSignatureVerifier struct {
 	secret []byte
 }
@@ -45,14 +41,10 @@ func (v *HMACSignatureVerifier) Verify(payload []byte, signature string) error {
 
 var _ SignatureVerifier = (*HMACSignatureVerifier)(nil)
 
-// PaymentService is the minimal payment surface the webhook service needs.
-// Consumer-owned; *payment.Service satisfies it.
 type PaymentService interface {
 	ApplyProviderCallback(ctx context.Context, reference, newStatus string) (*payment.Payment, error)
 }
 
-// Service handles the end-to-end webhook flow: signature verification,
-// payload parsing, and delegation to the payment service.
 type Service struct {
 	verifier SignatureVerifier
 	payments PaymentService
@@ -62,8 +54,6 @@ func NewService(verifier SignatureVerifier, payments PaymentService) *Service {
 	return &Service{verifier: verifier, payments: payments}
 }
 
-// Process verifies the signature, parses the payload, and applies the
-// callback via the payment service. Returns wire-mapped domain errors.
 func (s *Service) Process(ctx context.Context, payload []byte, signature string) error {
 	if err := s.verifier.Verify(payload, signature); err != nil {
 		return err

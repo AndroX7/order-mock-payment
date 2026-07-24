@@ -13,15 +13,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// Integration tests for PostgresRepository. Skipped unless TEST_POSTGRES_DSN
-// is set (typically pointing at the docker-compose Postgres instance).
-//
-//   TEST_POSTGRES_DSN='postgres://app:app@localhost:5432/order_mock_payment?sslmode=disable' \
-//     go test ./internal/order/... -run PostgresRepository
-//
-// Each test isolates itself by creating a user row + a fresh set of orders.
-// The users are cleaned up on completion via ON DELETE CASCADE on orders.
-
 func openTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 	dsn := os.Getenv("TEST_POSTGRES_DSN")
@@ -38,8 +29,6 @@ func openTestDB(t *testing.T) *sqlx.DB {
 	return db
 }
 
-// seedUser inserts a fresh user row and returns its id. Registers cleanup
-// to delete the user (which cascades to its orders).
 func seedUser(t *testing.T, db *sqlx.DB) uuid.UUID {
 	t.Helper()
 	id := uuid.New()
@@ -146,7 +135,6 @@ func TestPostgresRepository_OwnershipOnGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// userB fetching userA's order must see ErrOrderNotFound (no distinct forbidden).
 	_, err := repo.GetByID(ctx, userB, o.ID)
 	if !errors.Is(err, ErrOrderNotFound) {
 		t.Errorf("cross-user GetByID err = %v, want ErrOrderNotFound", err)
@@ -176,7 +164,6 @@ func TestPostgresRepository_Update_PreservesStatus(t *testing.T) {
 		t.Errorf("Update changed Status: got %q, want %q", o.Status, StatusPending)
 	}
 
-	// Verify persisted state.
 	got, err := repo.GetByID(ctx, userID, o.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -200,7 +187,6 @@ func TestPostgresRepository_Update_OwnershipEnforced(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Attempt update as userB — must fail with ErrOrderNotFound.
 	attack := *o
 	attack.UserID = userB
 	attack.Symbol = "HACKED"
@@ -208,7 +194,6 @@ func TestPostgresRepository_Update_OwnershipEnforced(t *testing.T) {
 		t.Errorf("cross-user Update err = %v, want ErrOrderNotFound", err)
 	}
 
-	// Confirm nothing changed.
 	got, err := repo.GetByID(ctx, userA, o.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -232,20 +217,16 @@ func TestPostgresRepository_Delete_OwnershipEnforced(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// userB attempt.
 	if err := repo.Delete(ctx, userB, o.ID); !errors.Is(err, ErrOrderNotFound) {
 		t.Errorf("cross-user Delete err = %v, want ErrOrderNotFound", err)
 	}
-	// Row still exists.
 	if _, err := repo.GetByID(ctx, userA, o.ID); err != nil {
 		t.Errorf("row was deleted despite ownership failure: %v", err)
 	}
 
-	// Real owner deletes cleanly.
 	if err := repo.Delete(ctx, userA, o.ID); err != nil {
 		t.Fatalf("owner Delete: %v", err)
 	}
-	// Row gone.
 	if _, err := repo.GetByID(ctx, userA, o.ID); !errors.Is(err, ErrOrderNotFound) {
 		t.Errorf("post-delete Get err = %v, want ErrOrderNotFound", err)
 	}

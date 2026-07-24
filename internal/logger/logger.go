@@ -1,4 +1,3 @@
-// Package logger builds the application's slog.Logger.
 package logger
 
 import (
@@ -7,9 +6,6 @@ import (
 	"strings"
 )
 
-// New returns a slog.Logger configured for the environment.
-//   - production  -> JSON handler (structured, ingest-friendly)
-//   - anything else -> text handler (human-readable)
 func New(env, level string) *slog.Logger {
 	isProd := strings.EqualFold(env, "production")
 	opts := &slog.HandlerOptions{

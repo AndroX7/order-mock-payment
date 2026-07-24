@@ -13,12 +13,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// Integration tests for PostgresRepository. Skipped unless TEST_POSTGRES_DSN
-// is set.
-//
-//   TEST_POSTGRES_DSN='postgres://app:app@localhost:5432/order_mock_payment?sslmode=disable' \
-//     go test ./internal/upload/... -run PostgresRepository
-
 func openTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 	dsn := os.Getenv("TEST_POSTGRES_DSN")
@@ -35,8 +29,6 @@ func openTestDB(t *testing.T) *sqlx.DB {
 	return db
 }
 
-// seedUserAndOrder creates a fresh user + order row and registers cleanup.
-// Returns (userID, orderID).
 func seedUserAndOrder(t *testing.T, db *sqlx.DB) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 	userID := uuid.New()
@@ -104,7 +96,6 @@ func TestPostgresRepository_OwnershipOnGet(t *testing.T) {
 	repo := NewPostgresRepository(db)
 	ctx := context.Background()
 
-	// userA owns the upload; userB attempts to read it.
 	userA, orderA := seedUserAndOrder(t, db)
 	userB, _ := seedUserAndOrder(t, db)
 
@@ -113,11 +104,9 @@ func TestPostgresRepository_OwnershipOnGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Owner can fetch.
 	if _, err := repo.GetByID(ctx, userA, u.ID); err != nil {
 		t.Errorf("owner GetByID: %v", err)
 	}
-	// Non-owner gets uniform "not found".
 	_, err := repo.GetByID(ctx, userB, u.ID)
 	if !errors.Is(err, ErrUploadNotFound) {
 		t.Errorf("cross-user GetByID err = %v, want ErrUploadNotFound", err)

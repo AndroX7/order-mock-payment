@@ -1,4 +1,3 @@
-// Package server wires the Gin router into an http.Server with graceful shutdown.
 package server
 
 import (
@@ -24,8 +23,6 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/webhook"
 )
 
-// Deps groups the concrete dependencies the HTTP server needs.
-// Explicit struct injection — no globals, no wiring frameworks.
 type Deps struct {
 	Config         *config.Config
 	Logger         *slog.Logger
@@ -63,7 +60,6 @@ func New(deps Deps) *Server {
 	deps.PaymentHandler.RegisterRoutes(api, deps.AuthMiddleware)
 	deps.UploadHandler.RegisterRoutes(api, deps.AuthMiddleware)
 
-	// Webhooks live outside /api/v1 — provider auth is the signature, not JWT.
 	webhooks := router.Group("/webhooks")
 	deps.WebhookHandler.RegisterRoutes(webhooks)
 
@@ -83,8 +79,6 @@ func New(deps Deps) *Server {
 	}
 }
 
-// Run starts the HTTP listener and blocks until ctx is cancelled or the
-// listener returns an error, then triggers a graceful shutdown.
 func (s *Server) Run(ctx context.Context) error {
 	errCh := make(chan error, 1)
 	go func() {
@@ -124,8 +118,6 @@ func registerRootRoute(r *gin.Engine, version string) {
 	})
 }
 
-// slogRecovery routes gin panics through slog instead of gin's default stderr
-// writer, so structured logs stay in one place.
 func slogRecovery(log *slog.Logger) gin.HandlerFunc {
 	return gin.CustomRecoveryWithWriter(io.Discard, func(c *gin.Context, err any) {
 		log.Error("panic recovered",

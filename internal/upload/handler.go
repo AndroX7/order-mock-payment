@@ -13,8 +13,6 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/middleware"
 )
 
-// Domain-specific API error codes. Cross-cutting codes
-// (INVALID_REQUEST, UNAUTHORIZED, INTERNAL_ERROR) live in httpresp.
 const (
 	CodeInvalidMultipart = "INVALID_MULTIPART"
 	CodeMissingFile      = "MISSING_FILE"
@@ -25,7 +23,6 @@ const (
 	CodeUploadNotFound   = "UPLOAD_NOT_FOUND"
 )
 
-// UploadService is the minimal service surface Handler needs.
 type UploadService interface {
 	Create(ctx context.Context, userID, orderID uuid.UUID, file multipart.File, size int64) (*Upload, error)
 	Get(ctx context.Context, userID, uploadID uuid.UUID) (*Upload, error)
@@ -39,12 +36,6 @@ func NewHandler(svc UploadService) *Handler {
 	return &Handler{svc: svc}
 }
 
-// Create handles POST /api/v1/uploads (multipart/form-data).
-//
-// Form fields:
-//
-//	order_id  — UUID of the order the file belongs to (must be owned by caller)
-//	file      — the uploaded file part
 func (h *Handler) Create(c *gin.Context) {
 	userID, ok := middleware.RequireUserID(c)
 	if !ok {
@@ -59,7 +50,6 @@ func (h *Handler) Create(c *gin.Context) {
 
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
-		// Covers non-multipart request bodies and missing "file" field.
 		if errors.Is(err, http.ErrMissingFile) {
 			httpresp.Error(c, http.StatusBadRequest, CodeMissingFile, "file field is required")
 			return
@@ -84,7 +74,6 @@ func (h *Handler) Create(c *gin.Context) {
 	httpresp.Success(c, http.StatusCreated, gin.H{"upload": NewUploadResponse(u)})
 }
 
-// Get handles GET /api/v1/uploads/:id.
 func (h *Handler) Get(c *gin.Context) {
 	userID, ok := middleware.RequireUserID(c)
 	if !ok {

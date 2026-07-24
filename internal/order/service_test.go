@@ -11,8 +11,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// --- Test doubles ---
-
 type fakeRepo struct {
 	orders  map[uuid.UUID]*Order
 	failErr error // if non-nil, every method returns this
@@ -29,7 +27,6 @@ func (r *fakeRepo) Create(_ context.Context, o *Order) error {
 	o.ID = uuid.New()
 	o.CreatedAt = time.Now().UTC()
 	o.UpdatedAt = o.CreatedAt
-	// Copy stored so callers can't accidentally mutate the fake's state.
 	stored := *o
 	r.orders[o.ID] = &stored
 	return nil
@@ -74,7 +71,6 @@ func (r *fakeRepo) Update(_ context.Context, o *Order) error {
 	existing.Quantity = o.Quantity
 	existing.Price = o.Price
 	existing.UpdatedAt = time.Now().UTC()
-	// Populate the caller's struct with the DB-returned fields.
 	o.Status = existing.Status
 	o.CreatedAt = existing.CreatedAt
 	o.UpdatedAt = existing.UpdatedAt
@@ -121,8 +117,6 @@ func (r *fakeRepo) AdvanceStatus(_ context.Context, orderID uuid.UUID, status st
 
 var _ Repository = (*fakeRepo)(nil)
 
-// --- helpers ---
-
 func dec(s string) decimal.Decimal { return decimal.RequireFromString(s) }
 
 func validCreateReq() CreateOrderRequest {
@@ -133,8 +127,6 @@ func validCreateReq() CreateOrderRequest {
 		Price:    dec("30000"),
 	}
 }
-
-// --- Create ---
 
 func TestCreate_Cases(t *testing.T) {
 	userID := uuid.New()
@@ -225,8 +217,6 @@ func TestCreate_Cases(t *testing.T) {
 	}
 }
 
-// --- Get ---
-
 func TestGet_Cases(t *testing.T) {
 	userA := uuid.New()
 	userB := uuid.New()
@@ -278,8 +268,6 @@ func TestGet_Cases(t *testing.T) {
 	})
 }
 
-// --- List ---
-
 func TestList_OwnershipAndErrors(t *testing.T) {
 	userA := uuid.New()
 	userB := uuid.New()
@@ -326,8 +314,6 @@ func TestList_OwnershipAndErrors(t *testing.T) {
 		}
 	})
 }
-
-// --- Update ---
 
 func TestUpdate_Cases(t *testing.T) {
 	userA := uuid.New()
@@ -392,8 +378,6 @@ func TestUpdate_Cases(t *testing.T) {
 		}
 	})
 }
-
-// --- Delete ---
 
 func TestDelete_Cases(t *testing.T) {
 	userA := uuid.New()

@@ -1,4 +1,3 @@
-// Package middleware provides Gin middlewares for cross-cutting concerns.
 package middleware
 
 import (
@@ -13,14 +12,10 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/httpresp"
 )
 
-// TokenParser is the minimal parsing surface RequireAuth requires.
-// Consumer-owned interface: middleware declares what it depends on;
-// *auth.HMACTokenService satisfies it.
 type TokenParser interface {
 	Parse(token string) (auth.Claims, error)
 }
 
-// ClaimsContextKey is the gin.Context key under which validated Claims are stored.
 const ClaimsContextKey = "auth_claims"
 
 var (
@@ -28,9 +23,6 @@ var (
 	errInvalidScheme = errors.New("invalid Authorization scheme")
 )
 
-// RequireAuth returns a Gin middleware that validates a Bearer token
-// and stores auth.Claims in the request context on success. Any failure
-// aborts the request with 401.
 func RequireAuth(parser TokenParser, log *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, err := extractBearer(c.GetHeader("Authorization"))
@@ -48,8 +40,6 @@ func RequireAuth(parser TokenParser, log *slog.Logger) gin.HandlerFunc {
 	}
 }
 
-// GetClaims retrieves the validated Claims from the request context.
-// Callers must have run RequireAuth on the route.
 func GetClaims(c *gin.Context) (auth.Claims, bool) {
 	v, ok := c.Get(ClaimsContextKey)
 	if !ok {

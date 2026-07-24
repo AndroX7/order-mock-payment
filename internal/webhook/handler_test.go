@@ -167,9 +167,6 @@ func TestCallbackHandler(t *testing.T) {
 	}
 }
 
-// Duplicate callback: send the same paid callback twice; both return 200.
-// Idempotency is enforced by payment.Service; here the fake accepts both
-// calls without error, verifying the handler's success path is stable.
 func TestCallbackHandler_DuplicateCallback(t *testing.T) {
 	body := `{"provider_reference":"PAY-000001","status":"paid"}`
 	sig := signBody(testWebhookSecret, body)

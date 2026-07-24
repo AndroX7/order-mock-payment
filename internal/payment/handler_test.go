@@ -34,7 +34,6 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-// testEnv wires a real router with real middleware + JWT + fake dependencies.
 type testEnv struct {
 	orders   *fakeOrderService
 	repo     *fakePaymentRepo
@@ -66,7 +65,6 @@ func (e *testEnv) tokenFor(t *testing.T, userID uuid.UUID) string {
 	return tok
 }
 
-// seed an order + optional payment for the user.
 func (e *testEnv) seedOrder(userID uuid.UUID, status string) *order.Order {
 	return e.orders.seedOrder(userID, status, "1", "1")
 }
@@ -123,8 +121,6 @@ func assertErrorCode(t *testing.T, w *httptest.ResponseRecorder, wantStatus int,
 	}
 }
 
-// --- Create ---
-
 func TestCreatePaymentHandler(t *testing.T) {
 	userA := uuid.New()
 	userB := uuid.New()
@@ -149,7 +145,6 @@ func TestCreatePaymentHandler(t *testing.T) {
 		if ref, _ := p["provider_reference"].(string); ref == "" {
 			t.Error("provider_reference missing")
 		}
-		// order status must be transitioned.
 		if env.orders.orders[ord.ID].Status != order.StatusPendingPayment {
 			t.Errorf("order status = %q, want %q",
 				env.orders.orders[ord.ID].Status, order.StatusPendingPayment)
@@ -178,7 +173,6 @@ func TestCreatePaymentHandler(t *testing.T) {
 
 	t.Run("forbidden ownership returns 404", func(t *testing.T) {
 		env := newTestEnv(t)
-		// order belongs to userB; userA attempts to pay for it.
 		ord := env.seedOrder(userB, order.StatusPending)
 		body := `{"order_id":"` + ord.ID.String() + `"}`
 		w := doJSON(t, env, http.MethodPost, "/api/v1/payments", body, env.tokenFor(t, userA))
@@ -232,8 +226,6 @@ func TestCreatePaymentHandler(t *testing.T) {
 		assertErrorCode(t, w, http.StatusUnsupportedMediaType, httpresp.CodeInvalidContentType)
 	})
 }
-
-// --- Get ---
 
 func TestGetPaymentHandler(t *testing.T) {
 	userA := uuid.New()

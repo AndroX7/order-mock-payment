@@ -2,8 +2,6 @@ package order
 
 import "errors"
 
-// Sentinel errors returned by service and repository. Transport code
-// (handler.go) maps them to HTTP status codes and API error codes.
 var (
 	ErrInvalidSymbol   = errors.New("symbol is required, uppercase, and at most 20 characters")
 	ErrInvalidSide     = errors.New("side must be BUY or SELL")

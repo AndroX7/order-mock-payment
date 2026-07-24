@@ -1,4 +1,3 @@
-// Package database bootstraps the PostgreSQL connection pool.
 package database
 
 import (
@@ -11,12 +10,10 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/config"
 )
 
-// Postgres owns the pooled sqlx handle. Repositories depend on the *sqlx.DB directly.
 type Postgres struct {
 	DB *sqlx.DB
 }
 
-// New opens a pooled connection, applies pool limits, and verifies with a ping.
 func New(ctx context.Context, cfg config.Postgres) (*Postgres, error) {
 	db, err := sqlx.Open("pgx", cfg.DSN())
 	if err != nil {
@@ -36,7 +33,6 @@ func New(ctx context.Context, cfg config.Postgres) (*Postgres, error) {
 	return &Postgres{DB: db}, nil
 }
 
-// HealthCheck verifies the DB is reachable. Callers should pass a bounded context.
 func (p *Postgres) HealthCheck(ctx context.Context) error {
 	return p.DB.PingContext(ctx)
 }

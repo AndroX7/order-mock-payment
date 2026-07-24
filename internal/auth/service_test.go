@@ -10,10 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// --- Test doubles ---
-
-// fakeRepo is an in-memory Repository. Mirrors the real UNIQUE-constraint
-// behavior for the duplicate-email case.
 type fakeRepo struct {
 	createErr error
 	getErr    error
@@ -48,8 +44,6 @@ func (r *fakeRepo) GetByEmail(_ context.Context, email string) (*User, error) {
 	return nil, ErrUserNotFound
 }
 
-// stubHasher is fast and deterministic — no bcrypt in service tests.
-// compareErr controls what Compare returns; nil == passwords match.
 type stubHasher struct {
 	compareErr error
 }
@@ -58,7 +52,6 @@ func (stubHasher) Hash(p string) (string, error) { return "HASH(" + p + ")", nil
 
 func (h stubHasher) Compare(_, _ string) error { return h.compareErr }
 
-// stubIssuer returns a canned token or a canned error.
 type stubIssuer struct {
 	token string
 	err   error
@@ -74,14 +67,11 @@ func (s stubIssuer) Generate(_ User) (string, error) {
 	return s.token, nil
 }
 
-// Compile-time interface checks.
 var (
 	_ Repository     = (*fakeRepo)(nil)
 	_ PasswordHasher = stubHasher{}
 	_ TokenIssuer    = stubIssuer{}
 )
-
-// --- Tests ---
 
 func TestSignup_ValidationCases(t *testing.T) {
 	repoBoom := errors.New("db down")
@@ -219,14 +209,10 @@ func keys(m map[string]*User) []string {
 	return out
 }
 
-// --- Login tests ---
-
 func TestLogin_Cases(t *testing.T) {
 	repoBoom := errors.New("db down")
 	issuerBoom := errors.New("signing failed")
 
-	// seedUser installs a user with a known password hash so Compare-succeeds
-	// paths work with the stub hasher.
 	seedUser := func(r *fakeRepo) *User {
 		u := &User{
 			ID:           uuid.New(),

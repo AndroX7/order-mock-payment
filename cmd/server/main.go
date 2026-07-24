@@ -1,4 +1,3 @@
-// Command server is the composition root for the order-mock-payment service.
 package main
 
 import (
@@ -24,7 +23,6 @@ import (
 
 const startupTimeout = 30 * time.Second
 
-// version is injected at build time via -ldflags "-X main.version=...".
 var version = "dev"
 
 func main() {
@@ -43,12 +41,9 @@ func run() error {
 	log := logger.New(cfg.App.Env, cfg.App.LogLevel)
 	slog.SetDefault(log)
 
-	// SIGINT/SIGTERM cancel this ctx, which drives graceful shutdown everywhere.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Bounded startup: init must succeed within startupTimeout or we fail fast.
-	// Derives from ctx so a shutdown signal during boot still cancels immediately.
 	startCtx, startCancel := context.WithTimeout(ctx, startupTimeout)
 	defer startCancel()
 
@@ -72,10 +67,8 @@ func run() error {
 		}
 	}()
 
-	// Startup complete — release the deadline timer eagerly.
 	startCancel()
 
-	// Feature wiring. Pure struct composition, no I/O.
 	tokenSvc := auth.NewHMACTokenService(cfg.JWT.Secret, cfg.JWT.TTL)
 	authMW := middleware.RequireAuth(tokenSvc, log)
 

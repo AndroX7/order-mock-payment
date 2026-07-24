@@ -15,9 +15,6 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/order"
 )
 
-// --- Test doubles ---
-
-// fakeOrderService satisfies upload.OrderService.
 type fakeOrderService struct {
 	orders map[uuid.UUID]*order.Order
 	err    error
@@ -53,7 +50,6 @@ func (s *fakeOrderService) seedOrder(userID uuid.UUID) *order.Order {
 	return o
 }
 
-// fakeRepo — in-memory Repository.
 type fakeRepo struct {
 	uploads   map[uuid.UUID]*Upload
 	createErr error
@@ -87,7 +83,6 @@ func (r *fakeRepo) GetByID(_ context.Context, _, uploadID uuid.UUID) (*Upload, e
 	return &cp, nil
 }
 
-// fakeStorage — in-memory Storage.
 type fakeStorage struct {
 	saved   map[string][]byte
 	saveErr error
@@ -115,11 +110,6 @@ var (
 	_ OrderService = (*fakeOrderService)(nil)
 )
 
-// --- File magic-byte helpers ---
-//
-// http.DetectContentType relies on well-known sniff signatures.
-// Minimum viable payloads for each supported type:
-
 var (
 	pdfMagic  = []byte("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n")
 	pngMagic  = []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
@@ -127,7 +117,6 @@ var (
 	textBytes = []byte("this is plain text, not a supported upload type\n")
 )
 
-// wrapReader adapts a *bytes.Reader into multipart.File.
 type readSeekerFile struct{ *bytes.Reader }
 
 func (readSeekerFile) Close() error { return nil }
@@ -135,8 +124,6 @@ func (readSeekerFile) Close() error { return nil }
 func toMultipart(b []byte) multipart.File {
 	return readSeekerFile{bytes.NewReader(b)}
 }
-
-// --- Tests ---
 
 func TestCreate_Cases(t *testing.T) {
 	userA := uuid.New()
@@ -304,7 +291,6 @@ func TestGet_DelegatesToRepository(t *testing.T) {
 	storage := newFakeStorage()
 	svc := NewService(repo, storage, orders, 1024)
 
-	// Seed a stored upload directly via repo (bypassing full Create for brevity).
 	u := &Upload{OrderID: uuid.New(), Filename: "x.pdf", ContentType: "application/pdf", Size: 100, Path: "test/x.pdf"}
 	if err := repo.Create(context.Background(), u); err != nil {
 		t.Fatal(err)
@@ -323,8 +309,6 @@ func TestGet_DelegatesToRepository(t *testing.T) {
 		t.Errorf("unknown id err = %v, want ErrUploadNotFound", err)
 	}
 }
-
-// --- Storage safety (defense-in-depth) ---
 
 func TestLocalStorage_RejectsUnsafeFilenames(t *testing.T) {
 	tmp := t.TempDir()
@@ -348,7 +332,6 @@ func TestLocalStorage_SaveWritesFile(t *testing.T) {
 	if rel == "" {
 		t.Fatal("empty relative path")
 	}
-	// The file must exist under tmp/rel with the same bytes.
 	got, err := os.ReadFile(tmp + string(os.PathSeparator) + rel)
 	if err != nil {
 		t.Fatalf("read written file: %v", err)

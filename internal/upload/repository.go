@@ -10,9 +10,6 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// Repository is the minimal persistence surface the upload service needs.
-// GetByID enforces ownership at the DB level via a JOIN to orders — a
-// cross-user attempt returns ErrUploadNotFound (no distinct "forbidden").
 type Repository interface {
 	Create(ctx context.Context, u *Upload) error
 	GetByID(ctx context.Context, userID, uploadID uuid.UUID) (*Upload, error)
@@ -32,7 +29,6 @@ VALUES ($1, $2, $3, $4, $5)
 RETURNING id, created_at
 `
 
-// Create inserts a new upload row and populates u.ID, u.CreatedAt.
 func (r *PostgresRepository) Create(ctx context.Context, u *Upload) error {
 	err := r.db.QueryRowxContext(ctx, createUploadQuery,
 		u.OrderID, u.Filename, u.ContentType, u.Size, u.Path,
@@ -50,8 +46,6 @@ JOIN orders o ON o.id = u.order_id
 WHERE u.id = $1 AND o.user_id = $2
 `
 
-// GetByID returns the upload if it exists and its underlying order is
-// owned by userID. Otherwise ErrUploadNotFound.
 func (r *PostgresRepository) GetByID(ctx context.Context, userID, uploadID uuid.UUID) (*Upload, error) {
 	var u Upload
 	if err := r.db.GetContext(ctx, &u, getUploadByIDQuery, uploadID, userID); err != nil {

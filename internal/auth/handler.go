@@ -10,9 +10,6 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/httpresp"
 )
 
-// Domain-specific API error codes returned by this handler.
-// Cross-cutting codes (INVALID_REQUEST, INVALID_CONTENT_TYPE, INTERNAL_ERROR)
-// live in httpresp.
 const (
 	CodeInvalidEmail       = "INVALID_EMAIL"
 	CodeInvalidName        = "INVALID_NAME"
@@ -22,15 +19,11 @@ const (
 	CodeInvalidCredentials = "INVALID_CREDENTIALS"
 )
 
-// AuthService is the minimal service surface the Handler needs.
-// Consumer-owned interface: the handler declares what it requires; the
-// concrete *Service (or any test double) satisfies it.
 type AuthService interface {
 	Signup(ctx context.Context, req SignupRequest) (*User, error)
 	Login(ctx context.Context, req LoginRequest) (*User, string, error)
 }
 
-// Handler serves HTTP requests for the auth resource.
 type Handler struct {
 	svc AuthService
 }
@@ -39,7 +32,6 @@ func NewHandler(svc AuthService) *Handler {
 	return &Handler{svc: svc}
 }
 
-// Signup handles POST /api/v1/auth/signup.
 func (h *Handler) Signup(c *gin.Context) {
 	if !httpresp.IsJSONContentType(c) {
 		httpresp.Error(c, http.StatusUnsupportedMediaType, httpresp.CodeInvalidContentType,
@@ -66,7 +58,6 @@ func (h *Handler) Signup(c *gin.Context) {
 	})
 }
 
-// Login handles POST /api/v1/auth/login.
 func (h *Handler) Login(c *gin.Context) {
 	if !httpresp.IsJSONContentType(c) {
 		httpresp.Error(c, http.StatusUnsupportedMediaType, httpresp.CodeInvalidContentType,
@@ -93,8 +84,6 @@ func (h *Handler) Login(c *gin.Context) {
 	})
 }
 
-// mapDomainError maps a service/repo error into (HTTP status, API code, safe message).
-// Unknown errors collapse to 500 + generic message so no internal detail leaks.
 func mapDomainError(err error) (int, string, string) {
 	switch {
 	case errors.Is(err, ErrInvalidEmail):

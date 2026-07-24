@@ -13,14 +13,11 @@ import (
 
 const testWebhookSecret = "test-webhook-secret-at-least-32-bytes!"
 
-// signBody returns the hex-encoded HMAC-SHA256 of body using the given secret.
 func signBody(secret, body string) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(body))
 	return hex.EncodeToString(mac.Sum(nil))
 }
-
-// --- fakePayments — captures ApplyProviderCallback calls and injects errors. ---
 
 type fakePayments struct {
 	calls []applyCall
@@ -41,8 +38,6 @@ func (p *fakePayments) ApplyProviderCallback(_ context.Context, reference, newSt
 }
 
 var _ PaymentService = (*fakePayments)(nil)
-
-// --- Verifier tests ---
 
 func TestHMACSignatureVerifier(t *testing.T) {
 	v := NewHMACSignatureVerifier(testWebhookSecret)
@@ -76,8 +71,6 @@ func TestHMACSignatureVerifier(t *testing.T) {
 		})
 	}
 }
-
-// --- Service.Process tests ---
 
 func TestServiceProcess_Cases(t *testing.T) {
 	repoBoom := errors.New("db down")
@@ -183,10 +176,6 @@ func TestServiceProcess_Cases(t *testing.T) {
 		})
 	}
 }
-
-// --- Duplicate callback (idempotency): service surfaces payment.Service's
-// no-op success as a plain success. Since the fake accepts any callback,
-// this test asserts the service delegates twice without error. ---
 
 func TestServiceProcess_DuplicateCallback(t *testing.T) {
 	body := `{"provider_reference":"PAY-000001","status":"paid"}`

@@ -7,8 +7,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// Side and Status values. Kept as string constants to match the SQL
-// CHECK constraint without a stringly-typed enum layer.
 const (
 	SideBuy  = "BUY"
 	SideSell = "SELL"
@@ -19,7 +17,6 @@ const (
 	StatusPaymentFailed  = "payment_failed"
 )
 
-// Order is the domain type persisted in the orders table.
 type Order struct {
 	ID        uuid.UUID       `db:"id"`
 	UserID    uuid.UUID       `db:"user_id"`

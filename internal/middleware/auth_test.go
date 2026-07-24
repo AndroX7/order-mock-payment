@@ -27,8 +27,6 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-// newProtectedRouter mounts /protected behind RequireAuth. On success the
-// handler echoes claims so a test can verify they were stored.
 func newProtectedRouter(parser TokenParser) *gin.Engine {
 	r := gin.New()
 	r.GET("/protected",
@@ -96,7 +94,6 @@ func TestRequireAuth(t *testing.T) {
 			if w.Code != tc.wantStatus {
 				t.Errorf("status = %d, want %d; body=%s", w.Code, tc.wantStatus, w.Body.String())
 			}
-			// Unauthorized responses must carry the standard envelope.
 			if tc.wantStatus == http.StatusUnauthorized {
 				body := w.Body.String()
 				if !containsAll(body, `"success":false`, `"code":"UNAUTHORIZED"`) {

@@ -8,14 +8,10 @@ import (
 	"strings"
 )
 
-// TokenIssuer is the minimal token-generation surface the Service needs.
-// Consumer-owned interface; the concrete *HMACTokenService satisfies it.
 type TokenIssuer interface {
 	Generate(user User) (string, error)
 }
 
-// Service orchestrates user signup and login. Business rules live here so
-// any future transport (HTTP, gRPC, CLI) inherits identical behavior.
 type Service struct {
 	repo        Repository
 	hasher      PasswordHasher
@@ -31,9 +27,6 @@ const (
 	maxPasswordLen = 72
 )
 
-// Signup validates the request, hashes the password, and persists the user.
-// On success the returned *User has ID, CreatedAt, UpdatedAt populated by the
-// repository.
 func (s *Service) Signup(ctx context.Context, req SignupRequest) (*User, error) {
 	email, err := normalizeEmail(req.Email)
 	if err != nil {
@@ -57,18 +50,12 @@ func (s *Service) Signup(ctx context.Context, req SignupRequest) (*User, error) 
 		PasswordHash: hash,
 		Name:         name,
 	}
-	// Rely on the users_email_uidx UNIQUE constraint for duplicate detection —
-	// no SELECT-before-INSERT race window. The repository maps SQLSTATE 23505
-	// to ErrEmailAlreadyExists.
 	if err := s.repo.Create(ctx, u); err != nil {
 		return nil, err
 	}
 	return u, nil
 }
 
-// normalizeEmail trims, lower-cases, and validates the email. Returns the
-// canonical form (bare address, all lowercase). Rejects display-name forms
-// like "Alice <alice@example.com>" that net/mail otherwise accepts.
 func normalizeEmail(raw string) (string, error) {
 	trimmed := strings.ToLower(strings.TrimSpace(raw))
 	addr, err := mail.ParseAddress(trimmed)
@@ -81,7 +68,6 @@ func normalizeEmail(raw string) (string, error) {
 	return addr.Address, nil
 }
 
-// normalizeName trims whitespace and rejects empty names.
 func normalizeName(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -90,8 +76,6 @@ func normalizeName(raw string) (string, error) {
 	return trimmed, nil
 }
 
-// validatePassword checks byte length only. The password is treated as
-// opaque data — never trimmed, never transformed.
 func validatePassword(p string) error {
 	switch {
 	case len(p) < minPasswordLen:
@@ -103,10 +87,6 @@ func validatePassword(p string) error {
 	}
 }
 
-// Login validates credentials and issues a JWT. All authentication
-// failures — bad email format, unknown email, wrong password — collapse
-// to ErrInvalidCredentials so callers cannot distinguish "no such user"
-// from "wrong password".
 func (s *Service) Login(ctx context.Context, req LoginRequest) (*User, string, error) {
 	email, err := normalizeEmail(req.Email)
 	if err != nil {

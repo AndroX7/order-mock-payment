@@ -65,9 +65,6 @@ func (e *testEnv) tokenFor(t *testing.T, userID uuid.UUID) string {
 	return tok
 }
 
-// buildMultipart returns a multipart body containing order_id + a file part
-// (name=file) whose contents are payload. If omitFile is true, the file
-// part is skipped entirely.
 func buildMultipart(t *testing.T, orderID string, filename string, payload []byte, omitFile bool) (body *bytes.Buffer, contentType string) {
 	t.Helper()
 	body = &bytes.Buffer{}
@@ -116,8 +113,6 @@ func assertErrorCode(t *testing.T, w *httptest.ResponseRecorder, wantStatus int,
 	}
 }
 
-// --- Upload ---
-
 func TestUploadHandler(t *testing.T) {
 	userA := uuid.New()
 
@@ -145,7 +140,6 @@ func TestUploadHandler(t *testing.T) {
 		if ctype, _ := up["content_type"].(string); ctype != "application/pdf" {
 			t.Errorf("content_type = %q, want application/pdf", ctype)
 		}
-		// server-side generated filename, not the client's "anything.pdf"
 		fname, _ := up["filename"].(string)
 		if fname == "anything.pdf" {
 			t.Error("filename echoed client value; server should regenerate")
@@ -210,7 +204,6 @@ func TestUploadHandler(t *testing.T) {
 	t.Run("oversized file", func(t *testing.T) {
 		env := newTestEnv(t, 32) // tiny limit for fast test
 		ord := env.orders.seedOrder(userA)
-		// A PDF whose bytes exceed the configured limit.
 		payload := append([]byte{}, pdfMagic...)
 		payload = append(payload, bytes.Repeat([]byte("A"), 128)...)
 
@@ -251,8 +244,6 @@ func TestUploadHandler(t *testing.T) {
 		assertErrorCode(t, w, http.StatusBadRequest, httpresp.CodeInvalidRequest)
 	})
 }
-
-// --- Get ---
 
 func TestGetHandler(t *testing.T) {
 	userA := uuid.New()

@@ -13,16 +13,11 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/order"
 )
 
-// --- test doubles ---
-
-// fakeOrderService satisfies payment.OrderService. It stores orders and
-// tracks status transitions so tests can assert them.
 type fakeOrderService struct {
 	orders    map[uuid.UUID]*order.Order
 	getErr    error
 	updateErr error
-	// updates records (userID, orderID, newStatus) for assertions.
-	updates []statusUpdate
+	updates   []statusUpdate
 }
 
 type statusUpdate struct {
@@ -60,7 +55,6 @@ func (s *fakeOrderService) UpdateStatus(_ context.Context, userID, orderID uuid.
 	return nil
 }
 
-// advances records (uuid.Nil userID, orderID, status) for tests to inspect.
 func (s *fakeOrderService) AdvanceStatus(_ context.Context, orderID uuid.UUID, status string) error {
 	if s.updateErr != nil {
 		return s.updateErr
@@ -74,7 +68,6 @@ func (s *fakeOrderService) AdvanceStatus(_ context.Context, orderID uuid.UUID, s
 	return nil
 }
 
-// seedOrder inserts an order into the fake with pending status.
 func (s *fakeOrderService) seedOrder(userID uuid.UUID, status string, qty, price string) *order.Order {
 	o := &order.Order{
 		ID:        uuid.New(),
@@ -91,7 +84,6 @@ func (s *fakeOrderService) seedOrder(userID uuid.UUID, status string, qty, price
 	return o
 }
 
-// fakePaymentRepo — in-memory Repository. Mirrors the UNIQUE(order_id) constraint.
 type fakePaymentRepo struct {
 	payments  map[uuid.UUID]*Payment
 	byOrder   map[uuid.UUID]bool // simulates UNIQUE(order_id)
@@ -161,7 +153,6 @@ func (r *fakePaymentRepo) UpdateStatus(_ context.Context, paymentID uuid.UUID, s
 	return nil
 }
 
-// stubGateway returns canned responses.
 type stubGateway struct {
 	ref string
 	err error
@@ -182,8 +173,6 @@ var (
 	_ OrderService   = (*fakeOrderService)(nil)
 	_ PaymentGateway = stubGateway{}
 )
-
-// --- Create ---
 
 func TestCreate_Cases(t *testing.T) {
 	userA := uuid.New()
@@ -298,15 +287,12 @@ func TestCreate_Cases(t *testing.T) {
 			if got != nil {
 				t.Errorf("got payment on error: %+v", got)
 			}
-			// On error paths, order status must NOT have been mutated.
 			if len(orders.updates) != 0 {
 				t.Errorf("order status mutated on error path: %+v", orders.updates)
 			}
 		})
 	}
 }
-
-// --- Get ---
 
 func TestGet_Cases(t *testing.T) {
 	userA := uuid.New()
@@ -316,14 +302,12 @@ func TestGet_Cases(t *testing.T) {
 	repo := newFakePaymentRepo()
 	svc := NewService(repo, orders, &stubGateway{})
 
-	// Seed: user A owns order + payment.
 	ownedOrder := orders.seedOrder(userA, order.StatusPendingPayment, "1", "1")
 	ownedPayment := &Payment{OrderID: ownedOrder.ID, Provider: "stub", ProviderReference: "PAY-1",
 		Amount: decimal.RequireFromString("1"), Currency: "USD", Status: StatusPending}
 	if err := repo.Create(context.Background(), ownedPayment); err != nil {
 		t.Fatal(err)
 	}
-	// Seed: user B owns another order + payment.
 	otherOrder := orders.seedOrder(userB, order.StatusPendingPayment, "1", "1")
 	otherPayment := &Payment{OrderID: otherOrder.ID, Provider: "stub", ProviderReference: "PAY-2",
 		Amount: decimal.RequireFromString("1"), Currency: "USD", Status: StatusPending}
@@ -366,8 +350,6 @@ func TestGet_Cases(t *testing.T) {
 	})
 }
 
-// --- MockGateway determinism ---
-
 func TestMockGateway_ReferencesAreSequential(t *testing.T) {
 	g := NewMockGateway()
 	for i := 1; i <= 3; i++ {
@@ -385,12 +367,9 @@ func TestMockGateway_ReferencesAreSequential(t *testing.T) {
 	}
 }
 
-// --- ApplyProviderCallback (M5 webhook path) ---
-
 func TestApplyProviderCallback_Cases(t *testing.T) {
 	repoBoom := errors.New("db down")
 
-	// seed helper: install order + pending payment; returns the payment's reference.
 	seed := func(orders *fakeOrderService, repo *fakePaymentRepo, userID uuid.UUID, currentStatus string) string {
 		ord := orders.seedOrder(userID, order.StatusPendingPayment, "1", "1")
 		ref := "PAY-" + uuid.NewString()[:8]
@@ -522,7 +501,6 @@ func TestApplyProviderCallback_Cases(t *testing.T) {
 					t.Errorf("order status = %q, want %q", orders.updates[0].status, tc.wantOrderTxn)
 				}
 			} else {
-				// Idempotent case: no txn expected.
 				if len(orders.updates) != 0 {
 					t.Errorf("order mutated on idempotent path: %+v", orders.updates)
 				}

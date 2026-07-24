@@ -42,13 +42,11 @@ func TestHMACTokenService_Parse_Failures(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Expired token: issue with negative TTL.
 	expired, err := NewHMACTokenService(testSecret, -time.Hour).Generate(user)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Signed with a different secret.
 	wrongSig, err := NewHMACTokenService("different-secret-at-least-32-bytes!!", time.Hour).Generate(user)
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +61,6 @@ func TestHMACTokenService_Parse_Failures(t *testing.T) {
 		{"malformed structure", "not.a.jwt"},
 		{"empty string", ""},
 		{"random bytes", "xxx.yyy.zzz"},
-		// Tamper with a valid token by flipping the last byte.
 		{"tampered payload", valid[:len(valid)-1] + "A"},
 	}
 	for _, tc := range cases {

@@ -10,9 +10,6 @@ import (
 
 const maxSymbolLen = 20
 
-// Service holds business rules: validation, defaults, and repository
-// composition. Every method takes an authenticated userID so ownership
-// is a mandatory input, not something derivable from the request body.
 type Service struct {
 	repo Repository
 }
@@ -21,7 +18,6 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
-// Create validates the request and persists a new order owned by userID.
 func (s *Service) Create(ctx context.Context, userID uuid.UUID, req CreateOrderRequest) (*Order, error) {
 	if err := validateSymbol(req.Symbol); err != nil {
 		return nil, err
@@ -50,20 +46,14 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, req CreateOrderR
 	return o, nil
 }
 
-// Get returns the order if it exists and is owned by userID. Otherwise
-// ErrOrderNotFound (never a distinct "forbidden" error — prevents
-// ID enumeration).
 func (s *Service) Get(ctx context.Context, userID, orderID uuid.UUID) (*Order, error) {
 	return s.repo.GetByID(ctx, userID, orderID)
 }
 
-// List returns all orders owned by userID, newest first.
 func (s *Service) List(ctx context.Context, userID uuid.UUID) ([]*Order, error) {
 	return s.repo.List(ctx, userID)
 }
 
-// Update replaces the mutable fields of an order owned by userID.
-// status is server-controlled and never touched here.
 func (s *Service) Update(ctx context.Context, userID, orderID uuid.UUID, req UpdateOrderRequest) (*Order, error) {
 	if err := validateSymbol(req.Symbol); err != nil {
 		return nil, err
@@ -92,26 +82,17 @@ func (s *Service) Update(ctx context.Context, userID, orderID uuid.UUID, req Upd
 	return o, nil
 }
 
-// Delete removes the order if it exists and is owned by userID.
 func (s *Service) Delete(ctx context.Context, userID, orderID uuid.UUID) error {
 	return s.repo.Delete(ctx, userID, orderID)
 }
 
-// UpdateStatus mutates the order's status. Intended for cross-module
-// callers (payment) to advance the order lifecycle. Ownership is
-// enforced via the userID filter in the repository query.
 func (s *Service) UpdateStatus(ctx context.Context, userID, orderID uuid.UUID, status string) error {
 	return s.repo.UpdateStatus(ctx, userID, orderID, status)
 }
 
-// AdvanceStatus mutates status without an ownership filter. Callers
-// (webhook flows) must have established authorization via other means
-// (e.g. provider signature).
 func (s *Service) AdvanceStatus(ctx context.Context, orderID uuid.UUID, status string) error {
 	return s.repo.AdvanceStatus(ctx, orderID, status)
 }
-
-// --- validation ---
 
 func validateSymbol(s string) error {
 	if s == "" || len(s) > maxSymbolLen || s != strings.ToUpper(s) {

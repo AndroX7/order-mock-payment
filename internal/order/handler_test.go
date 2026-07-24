@@ -32,8 +32,6 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-// testEnv holds everything a handler test needs: repo (for seeding),
-// token service (for issuing valid tokens), and a fully wired router.
 type testEnv struct {
 	repo     *fakeRepo
 	tokenSvc *auth.HMACTokenService
@@ -114,8 +112,6 @@ func assertErrorCode(t *testing.T, w *httptest.ResponseRecorder, wantStatus int,
 	}
 }
 
-// --- Create ---
-
 func TestCreateHandler(t *testing.T) {
 	userA := uuid.New()
 
@@ -187,8 +183,6 @@ func TestCreateHandler(t *testing.T) {
 	}
 }
 
-// --- Get ---
-
 func TestGetHandler(t *testing.T) {
 	userA := uuid.New()
 	userB := uuid.New()
@@ -224,8 +218,6 @@ func TestGetHandler(t *testing.T) {
 		assertErrorCode(t, w, http.StatusNotFound, CodeOrderNotFound)
 	})
 }
-
-// --- List ---
 
 func TestListHandler(t *testing.T) {
 	userA := uuid.New()
@@ -273,8 +265,6 @@ func TestListHandler(t *testing.T) {
 		assertErrorCode(t, w, http.StatusUnauthorized, httpresp.CodeUnauthorized)
 	})
 }
-
-// --- Update ---
 
 func TestUpdateHandler(t *testing.T) {
 	userA := uuid.New()
@@ -331,8 +321,6 @@ func TestUpdateHandler(t *testing.T) {
 		assertErrorCode(t, w, http.StatusInternalServerError, httpresp.CodeInternalError)
 	})
 }
-
-// --- Delete ---
 
 func TestDeleteHandler(t *testing.T) {
 	userA := uuid.New()

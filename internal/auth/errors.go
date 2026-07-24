@@ -2,8 +2,6 @@ package auth
 
 import "errors"
 
-// Sentinel errors returned by service and repository. Transport code
-// (handler.go) maps them to HTTP status codes and API error codes.
 var (
 	ErrInvalidEmail       = errors.New("invalid email format")
 	ErrPasswordTooShort   = errors.New("password must be at least 8 characters")

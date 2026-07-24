@@ -2,8 +2,6 @@ package upload
 
 import "errors"
 
-// Sentinel errors returned by service, repository, and storage.
-// Transport code (handler.go) maps them to HTTP status codes and API error codes.
 var (
 	ErrOrderNotFound          = errors.New("order not found")
 	ErrEmptyFile              = errors.New("uploaded file is empty")

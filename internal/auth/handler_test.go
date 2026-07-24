@@ -173,7 +173,6 @@ func assertSuccessEnvelope(t *testing.T, env map[string]any) {
 	if id, _ := user["id"].(string); id == "" {
 		t.Errorf("user.id missing/empty; user=%v", user)
 	}
-	// UserResponse fields only — no password/hash keys.
 	if _, present := user["password"]; present {
 		t.Errorf("user.password present in response")
 	}
@@ -199,9 +198,6 @@ func assertErrorEnvelope(t *testing.T, env map[string]any, wantCode string) {
 	}
 }
 
-// assertNoPasswordLeak scans the raw response body for anything that looks
-// like a password or password hash. Belt-and-suspenders on top of the
-// UserResponse field check.
 func assertNoPasswordLeak(t *testing.T, body []byte) {
 	t.Helper()
 	lower := strings.ToLower(string(body))
@@ -212,12 +208,9 @@ func assertNoPasswordLeak(t *testing.T, body []byte) {
 	}
 }
 
-// --- Login handler tests ---
-
 func TestLoginHandler(t *testing.T) {
 	const validBody = `{"email":"alice@example.com","password":"correct-horse"}`
 
-	// seedUser installs a user under the target email with a stub-compatible hash.
 	seedUser := func(r *fakeRepo) {
 		r.users["alice@example.com"] = &User{
 			ID:           uuid.New(),

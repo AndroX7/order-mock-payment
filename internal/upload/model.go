@@ -6,8 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Upload is the domain type persisted in the uploads table.
-// Uploads are immutable: no updated_at, no update flow.
 type Upload struct {
 	ID          uuid.UUID `db:"id"`
 	OrderID     uuid.UUID `db:"order_id"`

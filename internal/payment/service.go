@@ -10,20 +10,14 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/order"
 )
 
-// Default currency. Orders currently have no currency column; a real
-// multi-currency flow would carry it on the order itself.
 const defaultCurrency = "USD"
 
-// OrderService is the minimal order-domain surface the payment service
-// needs. Consumer-owned interface; *order.Service satisfies it.
 type OrderService interface {
 	Get(ctx context.Context, userID, orderID uuid.UUID) (*order.Order, error)
 	UpdateStatus(ctx context.Context, userID, orderID uuid.UUID, status string) error
 	AdvanceStatus(ctx context.Context, orderID uuid.UUID, status string) error
 }
 
-// Service orchestrates payment creation and retrieval. It owns ownership
-// enforcement (via OrderService) and lifecycle transitions.
 type Service struct {
 	repo    Repository
 	orders  OrderService
@@ -34,14 +28,6 @@ func NewService(repo Repository, orders OrderService, gateway PaymentGateway) *S
 	return &Service{repo: repo, orders: orders, gateway: gateway}
 }
 
-// Create initiates a payment for orderID owned by userID.
-//
-//	load order (also verifies ownership)
-//	→ check payable state
-//	→ compute amount from order
-//	→ gateway.CreatePayment
-//	→ persist payment
-//	→ transition order status to pending_payment
 func (s *Service) Create(ctx context.Context, userID, orderID uuid.UUID) (*Payment, error) {
 	o, err := s.orders.Get(ctx, userID, orderID)
 	if err != nil {
@@ -83,13 +69,6 @@ func (s *Service) Create(ctx context.Context, userID, orderID uuid.UUID) (*Payme
 	return p, nil
 }
 
-// ApplyProviderCallback applies a provider status notification to the
-// referenced payment and cascades the order status. Idempotent: a callback
-// whose newStatus already matches current status is a no-op success.
-//
-// Only pending → paid and pending → failed are allowed. Any other
-// transition returns ErrInvalidStatusTransition. Unknown references
-// return ErrPaymentNotFound.
 func (s *Service) ApplyProviderCallback(ctx context.Context, reference, newStatus string) (*Payment, error) {
 	if newStatus != StatusPaid && newStatus != StatusFailed {
 		return nil, ErrInvalidStatusTransition
@@ -98,7 +77,6 @@ func (s *Service) ApplyProviderCallback(ctx context.Context, reference, newStatu
 	if err != nil {
 		return nil, err
 	}
-	// Idempotent: duplicate callback in the same terminal state is not an error.
 	if p.Status == newStatus {
 		return p, nil
 	}
@@ -120,9 +98,6 @@ func (s *Service) ApplyProviderCallback(ctx context.Context, reference, newStatu
 	return p, nil
 }
 
-// Get returns the payment if it exists and its underlying order is
-// owned by userID. Foreign / non-existent payments both surface as
-// ErrPaymentNotFound (no distinct "forbidden" — prevents enumeration).
 func (s *Service) Get(ctx context.Context, userID, paymentID uuid.UUID) (*Payment, error) {
 	p, err := s.repo.GetByID(ctx, paymentID)
 	if err != nil {
