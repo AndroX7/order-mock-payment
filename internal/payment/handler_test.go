@@ -18,6 +18,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/claudiovaldi/order-mock-payment/internal/auth"
+	"github.com/claudiovaldi/order-mock-payment/internal/httpresp"
 	"github.com/claudiovaldi/order-mock-payment/internal/middleware"
 	"github.com/claudiovaldi/order-mock-payment/internal/order"
 )
@@ -158,13 +159,13 @@ func TestCreatePaymentHandler(t *testing.T) {
 	t.Run("malformed JSON", func(t *testing.T) {
 		env := newTestEnv(t)
 		w := doJSON(t, env, http.MethodPost, "/api/v1/payments", `{`, env.tokenFor(t, userA))
-		assertErrorCode(t, w, http.StatusBadRequest, CodeInvalidRequest)
+		assertErrorCode(t, w, http.StatusBadRequest, httpresp.CodeInvalidRequest)
 	})
 
 	t.Run("missing order_id", func(t *testing.T) {
 		env := newTestEnv(t)
 		w := doJSON(t, env, http.MethodPost, "/api/v1/payments", `{}`, env.tokenFor(t, userA))
-		assertErrorCode(t, w, http.StatusBadRequest, CodeInvalidRequest)
+		assertErrorCode(t, w, http.StatusBadRequest, httpresp.CodeInvalidRequest)
 	})
 
 	t.Run("missing token", func(t *testing.T) {
@@ -172,7 +173,7 @@ func TestCreatePaymentHandler(t *testing.T) {
 		ord := env.seedOrder(userA, order.StatusPending)
 		body := `{"order_id":"` + ord.ID.String() + `"}`
 		w := doJSON(t, env, http.MethodPost, "/api/v1/payments", body, "")
-		assertErrorCode(t, w, http.StatusUnauthorized, middleware.CodeUnauthorized)
+		assertErrorCode(t, w, http.StatusUnauthorized, httpresp.CodeUnauthorized)
 	})
 
 	t.Run("forbidden ownership returns 404", func(t *testing.T) {
@@ -207,7 +208,7 @@ func TestCreatePaymentHandler(t *testing.T) {
 		ord := env.seedOrder(userA, order.StatusPending)
 		body := `{"order_id":"` + ord.ID.String() + `"}`
 		w := doJSON(t, env, http.MethodPost, "/api/v1/payments", body, env.tokenFor(t, userA))
-		assertErrorCode(t, w, http.StatusInternalServerError, CodeInternalError)
+		assertErrorCode(t, w, http.StatusInternalServerError, httpresp.CodeInternalError)
 	})
 
 	t.Run("repository failure returns 500", func(t *testing.T) {
@@ -216,7 +217,7 @@ func TestCreatePaymentHandler(t *testing.T) {
 		ord := env.seedOrder(userA, order.StatusPending)
 		body := `{"order_id":"` + ord.ID.String() + `"}`
 		w := doJSON(t, env, http.MethodPost, "/api/v1/payments", body, env.tokenFor(t, userA))
-		assertErrorCode(t, w, http.StatusInternalServerError, CodeInternalError)
+		assertErrorCode(t, w, http.StatusInternalServerError, httpresp.CodeInternalError)
 	})
 
 	t.Run("wrong content-type", func(t *testing.T) {
@@ -228,7 +229,7 @@ func TestCreatePaymentHandler(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer "+env.tokenFor(t, userA))
 		w := httptest.NewRecorder()
 		env.router.ServeHTTP(w, req)
-		assertErrorCode(t, w, http.StatusUnsupportedMediaType, CodeInvalidContentType)
+		assertErrorCode(t, w, http.StatusUnsupportedMediaType, httpresp.CodeInvalidContentType)
 	})
 }
 
@@ -258,7 +259,7 @@ func TestGetPaymentHandler(t *testing.T) {
 		env := newTestEnv(t)
 		p := env.seedPayment(t, userA)
 		w := doJSON(t, env, http.MethodGet, "/api/v1/payments/"+p.ID.String(), "", "")
-		assertErrorCode(t, w, http.StatusUnauthorized, middleware.CodeUnauthorized)
+		assertErrorCode(t, w, http.StatusUnauthorized, httpresp.CodeUnauthorized)
 	})
 
 	t.Run("unknown payment id", func(t *testing.T) {
@@ -270,6 +271,6 @@ func TestGetPaymentHandler(t *testing.T) {
 	t.Run("invalid uuid param", func(t *testing.T) {
 		env := newTestEnv(t)
 		w := doJSON(t, env, http.MethodGet, "/api/v1/payments/not-a-uuid", "", env.tokenFor(t, userA))
-		assertErrorCode(t, w, http.StatusBadRequest, CodeInvalidRequest)
+		assertErrorCode(t, w, http.StatusBadRequest, httpresp.CodeInvalidRequest)
 	})
 }

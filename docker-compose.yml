@@ -59,6 +59,11 @@ services:
       REDIS_ADDR: redis:6379
       JWT_SECRET: dev-jwt-secret-do-not-use-in-prod-please-change-me
       JWT_TTL: 24h
+      WEBHOOK_SECRET: dev-webhook-secret-do-not-use-in-prod-please-change
+      UPLOAD_BASE_DIR: /app/uploads
+      UPLOAD_MAX_SIZE: "5242880"
+    volumes:
+      - uploads_data:/app/uploads
     ports:
       - "8080:8080"
     depends_on:
@@ -72,3 +77,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  uploads_data:

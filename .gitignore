@@ -3,6 +3,9 @@
 *.exe
 *.out
 
+# Local uploads directory (dev)
+/uploads/
+
 # Coverage & test artifacts
 *.test
 coverage.out

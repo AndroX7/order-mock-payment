@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/claudiovaldi/order-mock-payment/internal/auth"
+	"github.com/claudiovaldi/order-mock-payment/internal/httpresp"
 	"github.com/claudiovaldi/order-mock-payment/internal/middleware"
 )
 
@@ -131,7 +132,7 @@ func TestCreateHandler(t *testing.T) {
 		{name: "success", body: validBody, contentType: "application/json",
 			bearer: func(e *testEnv) string { return e.tokenFor(t, userA) }, wantStatus: http.StatusCreated},
 		{name: "missing token", body: validBody, contentType: "application/json",
-			bearer: func(*testEnv) string { return "" }, wantStatus: http.StatusUnauthorized, wantCode: middleware.CodeUnauthorized},
+			bearer: func(*testEnv) string { return "" }, wantStatus: http.StatusUnauthorized, wantCode: httpresp.CodeUnauthorized},
 		{name: "invalid symbol (lowercase)",
 			body:        `{"symbol":"btcusd","side":"BUY","quantity":"1","price":"1"}`,
 			contentType: "application/json",
@@ -146,12 +147,12 @@ func TestCreateHandler(t *testing.T) {
 			body:        `{"symbol":"BTCUSD","side":"BUY","quan`,
 			contentType: "application/json",
 			bearer:      func(e *testEnv) string { return e.tokenFor(t, userA) },
-			wantStatus:  http.StatusBadRequest, wantCode: CodeInvalidRequest},
+			wantStatus:  http.StatusBadRequest, wantCode: httpresp.CodeInvalidRequest},
 		{name: "wrong content type",
 			body:        validBody,
 			contentType: "text/plain",
 			bearer:      func(e *testEnv) string { return e.tokenFor(t, userA) },
-			wantStatus:  http.StatusUnsupportedMediaType, wantCode: CodeInvalidContentType},
+			wantStatus:  http.StatusUnsupportedMediaType, wantCode: httpresp.CodeInvalidContentType},
 	}
 
 	for _, tc := range cases {
@@ -210,12 +211,12 @@ func TestGetHandler(t *testing.T) {
 
 	t.Run("missing token", func(t *testing.T) {
 		w := doJSON(t, env, http.MethodGet, "/api/v1/orders/"+own.ID.String(), "", "")
-		assertErrorCode(t, w, http.StatusUnauthorized, middleware.CodeUnauthorized)
+		assertErrorCode(t, w, http.StatusUnauthorized, httpresp.CodeUnauthorized)
 	})
 
 	t.Run("invalid uuid param", func(t *testing.T) {
 		w := doJSON(t, env, http.MethodGet, "/api/v1/orders/not-a-uuid", "", env.tokenFor(t, userA))
-		assertErrorCode(t, w, http.StatusBadRequest, CodeInvalidRequest)
+		assertErrorCode(t, w, http.StatusBadRequest, httpresp.CodeInvalidRequest)
 	})
 
 	t.Run("unknown id", func(t *testing.T) {
@@ -269,7 +270,7 @@ func TestListHandler(t *testing.T) {
 
 	t.Run("missing token", func(t *testing.T) {
 		w := doJSON(t, env, http.MethodGet, "/api/v1/orders", "", "")
-		assertErrorCode(t, w, http.StatusUnauthorized, middleware.CodeUnauthorized)
+		assertErrorCode(t, w, http.StatusUnauthorized, httpresp.CodeUnauthorized)
 	})
 }
 
@@ -312,14 +313,14 @@ func TestUpdateHandler(t *testing.T) {
 		env := newTestEnv(t)
 		own := env.seed(t, userA)
 		w := doJSON(t, env, http.MethodPut, "/api/v1/orders/"+own.ID.String(), validBody, "")
-		assertErrorCode(t, w, http.StatusUnauthorized, middleware.CodeUnauthorized)
+		assertErrorCode(t, w, http.StatusUnauthorized, httpresp.CodeUnauthorized)
 	})
 
 	t.Run("malformed JSON", func(t *testing.T) {
 		env := newTestEnv(t)
 		own := env.seed(t, userA)
 		w := doJSON(t, env, http.MethodPut, "/api/v1/orders/"+own.ID.String(), `{`, env.tokenFor(t, userA))
-		assertErrorCode(t, w, http.StatusBadRequest, CodeInvalidRequest)
+		assertErrorCode(t, w, http.StatusBadRequest, httpresp.CodeInvalidRequest)
 	})
 
 	t.Run("internal error", func(t *testing.T) {
@@ -327,7 +328,7 @@ func TestUpdateHandler(t *testing.T) {
 		own := env.seed(t, userA)
 		env.repo.failErr = errors.New("db down")
 		w := doJSON(t, env, http.MethodPut, "/api/v1/orders/"+own.ID.String(), validBody, env.tokenFor(t, userA))
-		assertErrorCode(t, w, http.StatusInternalServerError, CodeInternalError)
+		assertErrorCode(t, w, http.StatusInternalServerError, httpresp.CodeInternalError)
 	})
 }
 
@@ -357,7 +358,7 @@ func TestDeleteHandler(t *testing.T) {
 		env := newTestEnv(t)
 		own := env.seed(t, userA)
 		w := doJSON(t, env, http.MethodDelete, "/api/v1/orders/"+own.ID.String(), "", "")
-		assertErrorCode(t, w, http.StatusUnauthorized, middleware.CodeUnauthorized)
+		assertErrorCode(t, w, http.StatusUnauthorized, httpresp.CodeUnauthorized)
 	})
 
 	t.Run("unknown id", func(t *testing.T) {

@@ -10,6 +10,8 @@ import (
 // Status values persisted in the payments table.
 const (
 	StatusPending = "pending"
+	StatusPaid    = "paid"
+	StatusFailed  = "failed"
 )
 
 // Payment is the domain type persisted in the payments table.

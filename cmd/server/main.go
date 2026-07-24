@@ -18,6 +18,8 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/order"
 	"github.com/claudiovaldi/order-mock-payment/internal/payment"
 	"github.com/claudiovaldi/order-mock-payment/internal/server"
+	"github.com/claudiovaldi/order-mock-payment/internal/upload"
+	"github.com/claudiovaldi/order-mock-payment/internal/webhook"
 )
 
 const startupTimeout = 30 * time.Second
@@ -90,6 +92,15 @@ func run() error {
 	paymentSvc := payment.NewService(paymentRepo, orderSvc, paymentGateway)
 	paymentHandler := payment.NewHandler(paymentSvc)
 
+	webhookVerifier := webhook.NewHMACSignatureVerifier(cfg.Webhook.Secret)
+	webhookSvc := webhook.NewService(webhookVerifier, paymentSvc)
+	webhookHandler := webhook.NewHandler(webhookSvc)
+
+	uploadStorage := upload.NewLocalStorage(cfg.Upload.BaseDir)
+	uploadRepo := upload.NewPostgresRepository(pg.DB)
+	uploadSvc := upload.NewService(uploadRepo, uploadStorage, orderSvc, cfg.Upload.MaxSize)
+	uploadHandler := upload.NewHandler(uploadSvc)
+
 	srv := server.New(server.Deps{
 		Config:         cfg,
 		Logger:         log,
@@ -98,6 +109,8 @@ func run() error {
 		AuthHandler:    authHandler,
 		OrderHandler:   orderHandler,
 		PaymentHandler: paymentHandler,
+		WebhookHandler: webhookHandler,
+		UploadHandler:  uploadHandler,
 		AuthMiddleware: authMW,
 		Version:        version,
 	})

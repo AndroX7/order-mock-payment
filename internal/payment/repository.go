@@ -17,6 +17,8 @@ import (
 type Repository interface {
 	Create(ctx context.Context, p *Payment) error
 	GetByID(ctx context.Context, paymentID uuid.UUID) (*Payment, error)
+	GetByProviderReference(ctx context.Context, reference string) (*Payment, error)
+	UpdateStatus(ctx context.Context, paymentID uuid.UUID, status string) error
 }
 
 type PostgresRepository struct {
@@ -67,6 +69,50 @@ func (r *PostgresRepository) GetByID(ctx context.Context, paymentID uuid.UUID) (
 		return nil, fmt.Errorf("get payment: %w", err)
 	}
 	return &p, nil
+}
+
+const getPaymentByReferenceQuery = `
+SELECT id, order_id, provider, provider_reference, amount, currency, status, created_at, updated_at
+FROM payments
+WHERE provider_reference = $1
+`
+
+// GetByProviderReference looks up a payment by its provider-side reference.
+// Used by the webhook flow, which knows the reference but not the payment ID.
+// Returns ErrPaymentNotFound if no row matches.
+func (r *PostgresRepository) GetByProviderReference(ctx context.Context, reference string) (*Payment, error) {
+	var p Payment
+	if err := r.db.GetContext(ctx, &p, getPaymentByReferenceQuery, reference); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrPaymentNotFound
+		}
+		return nil, fmt.Errorf("get payment by reference: %w", err)
+	}
+	return &p, nil
+}
+
+const updatePaymentStatusQuery = `
+UPDATE payments
+SET status = $1, updated_at = now()
+WHERE id = $2
+`
+
+// UpdateStatus mutates only the status column. Callers must have
+// established authorization; webhook flows do so via provider signature.
+// Returns ErrPaymentNotFound if the row does not exist.
+func (r *PostgresRepository) UpdateStatus(ctx context.Context, paymentID uuid.UUID, status string) error {
+	res, err := r.db.ExecContext(ctx, updatePaymentStatusQuery, status, paymentID)
+	if err != nil {
+		return fmt.Errorf("update payment status: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update payment status rows affected: %w", err)
+	}
+	if n == 0 {
+		return ErrPaymentNotFound
+	}
+	return nil
 }
 
 // pgUniqueViolationCode is PostgreSQL SQLSTATE 23505 (unique_violation).

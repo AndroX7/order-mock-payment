@@ -20,6 +20,8 @@ import (
 	"github.com/claudiovaldi/order-mock-payment/internal/database"
 	"github.com/claudiovaldi/order-mock-payment/internal/order"
 	"github.com/claudiovaldi/order-mock-payment/internal/payment"
+	"github.com/claudiovaldi/order-mock-payment/internal/upload"
+	"github.com/claudiovaldi/order-mock-payment/internal/webhook"
 )
 
 // Deps groups the concrete dependencies the HTTP server needs.
@@ -32,6 +34,8 @@ type Deps struct {
 	AuthHandler    *auth.Handler
 	OrderHandler   *order.Handler
 	PaymentHandler *payment.Handler
+	WebhookHandler *webhook.Handler
+	UploadHandler  *upload.Handler
 	AuthMiddleware gin.HandlerFunc
 	Version        string
 }
@@ -57,6 +61,11 @@ func New(deps Deps) *Server {
 	deps.AuthHandler.RegisterRoutes(api)
 	deps.OrderHandler.RegisterRoutes(api, deps.AuthMiddleware)
 	deps.PaymentHandler.RegisterRoutes(api, deps.AuthMiddleware)
+	deps.UploadHandler.RegisterRoutes(api, deps.AuthMiddleware)
+
+	// Webhooks live outside /api/v1 — provider auth is the signature, not JWT.
+	webhooks := router.Group("/webhooks")
+	deps.WebhookHandler.RegisterRoutes(webhooks)
 
 	httpSrv := &http.Server{
 		Addr:              net.JoinHostPort("", strconv.Itoa(deps.Config.App.HTTPPort)),

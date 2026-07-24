@@ -15,6 +15,8 @@ const (
 
 	StatusPending        = "pending"
 	StatusPendingPayment = "pending_payment"
+	StatusPaid           = "paid"
+	StatusPaymentFailed  = "payment_failed"
 )
 
 // Order is the domain type persisted in the orders table.

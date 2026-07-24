@@ -18,6 +18,8 @@ type Config struct {
 	Postgres Postgres
 	Redis    Redis
 	JWT      JWT
+	Webhook  Webhook
+	Upload   Upload
 }
 
 type App struct {
@@ -71,6 +73,15 @@ type JWT struct {
 	TTL    time.Duration
 }
 
+type Webhook struct {
+	Secret string
+}
+
+type Upload struct {
+	BaseDir string
+	MaxSize int64
+}
+
 // Load reads configuration from environment variables (and .env if present),
 // applies defaults, and validates.
 func Load() (*Config, error) {
@@ -119,6 +130,13 @@ func Load() (*Config, error) {
 			Secret: v.GetString("JWT_SECRET"),
 			TTL:    v.GetDuration("JWT_TTL"),
 		},
+		Webhook: Webhook{
+			Secret: v.GetString("WEBHOOK_SECRET"),
+		},
+		Upload: Upload{
+			BaseDir: v.GetString("UPLOAD_BASE_DIR"),
+			MaxSize: v.GetInt64("UPLOAD_MAX_SIZE"),
+		},
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -151,6 +169,9 @@ func setDefaults(v *viper.Viper) {
 	// JWT_SECRET has no default: operators must provide one. Validation rejects
 	// secrets shorter than 32 bytes.
 	v.SetDefault("JWT_TTL", 24*time.Hour)
+
+	v.SetDefault("UPLOAD_BASE_DIR", "./uploads")
+	v.SetDefault("UPLOAD_MAX_SIZE", int64(5*1024*1024)) // 5 MB
 }
 
 func (c *Config) validate() error {
@@ -188,6 +209,15 @@ func (c *Config) validate() error {
 	}
 	if c.JWT.TTL <= 0 {
 		return fmt.Errorf("JWT_TTL must be positive, got %s", c.JWT.TTL)
+	}
+	if len(c.Webhook.Secret) < 32 {
+		return fmt.Errorf("WEBHOOK_SECRET must be at least 32 bytes, got %d", len(c.Webhook.Secret))
+	}
+	if c.Upload.BaseDir == "" {
+		return errors.New("UPLOAD_BASE_DIR is required")
+	}
+	if c.Upload.MaxSize <= 0 {
+		return fmt.Errorf("UPLOAD_MAX_SIZE must be > 0, got %d", c.Upload.MaxSize)
 	}
 	return nil
 }

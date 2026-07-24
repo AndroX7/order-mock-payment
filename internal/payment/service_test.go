@@ -3,6 +3,7 @@ package payment
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -59,6 +60,20 @@ func (s *fakeOrderService) UpdateStatus(_ context.Context, userID, orderID uuid.
 	return nil
 }
 
+// advances records (uuid.Nil userID, orderID, status) for tests to inspect.
+func (s *fakeOrderService) AdvanceStatus(_ context.Context, orderID uuid.UUID, status string) error {
+	if s.updateErr != nil {
+		return s.updateErr
+	}
+	o, ok := s.orders[orderID]
+	if !ok {
+		return order.ErrOrderNotFound
+	}
+	o.Status = status
+	s.updates = append(s.updates, statusUpdate{uuid.Nil, orderID, status})
+	return nil
+}
+
 // seedOrder inserts an order into the fake with pending status.
 func (s *fakeOrderService) seedOrder(userID uuid.UUID, status string, qty, price string) *order.Order {
 	o := &order.Order{
@@ -82,6 +97,7 @@ type fakePaymentRepo struct {
 	byOrder   map[uuid.UUID]bool // simulates UNIQUE(order_id)
 	createErr error
 	getErr    error
+	updateErr error
 }
 
 func newFakePaymentRepo() *fakePaymentRepo {
@@ -117,6 +133,32 @@ func (r *fakePaymentRepo) GetByID(_ context.Context, paymentID uuid.UUID) (*Paym
 	}
 	cp := *p
 	return &cp, nil
+}
+
+func (r *fakePaymentRepo) GetByProviderReference(_ context.Context, reference string) (*Payment, error) {
+	if r.getErr != nil {
+		return nil, r.getErr
+	}
+	for _, p := range r.payments {
+		if p.ProviderReference == reference {
+			cp := *p
+			return &cp, nil
+		}
+	}
+	return nil, ErrPaymentNotFound
+}
+
+func (r *fakePaymentRepo) UpdateStatus(_ context.Context, paymentID uuid.UUID, status string) error {
+	if r.updateErr != nil {
+		return r.updateErr
+	}
+	p, ok := r.payments[paymentID]
+	if !ok {
+		return ErrPaymentNotFound
+	}
+	p.Status = status
+	p.UpdatedAt = time.Now().UTC()
+	return nil
 }
 
 // stubGateway returns canned responses.
@@ -333,7 +375,7 @@ func TestMockGateway_ReferencesAreSequential(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := "PAY-" + zeroPad(i)
+		want := fmt.Sprintf("PAY-%06d", i)
 		if got.Reference != want {
 			t.Errorf("iteration %d: got %q, want %q", i, got.Reference, want)
 		}
@@ -343,15 +385,148 @@ func TestMockGateway_ReferencesAreSequential(t *testing.T) {
 	}
 }
 
-func zeroPad(n int) string {
-	// Local, matches the "%06d" format used by MockGateway.
-	s := ""
-	for n > 0 {
-		s = string(rune('0'+(n%10))) + s
-		n /= 10
+// --- ApplyProviderCallback (M5 webhook path) ---
+
+func TestApplyProviderCallback_Cases(t *testing.T) {
+	repoBoom := errors.New("db down")
+
+	// seed helper: install order + pending payment; returns the payment's reference.
+	seed := func(orders *fakeOrderService, repo *fakePaymentRepo, userID uuid.UUID, currentStatus string) string {
+		ord := orders.seedOrder(userID, order.StatusPendingPayment, "1", "1")
+		ref := "PAY-" + uuid.NewString()[:8]
+		p := &Payment{
+			OrderID:           ord.ID,
+			Provider:          "stub",
+			ProviderReference: ref,
+			Amount:            decimal.RequireFromString("1"),
+			Currency:          "USD",
+			Status:            currentStatus,
+		}
+		if err := repo.Create(context.Background(), p); err != nil {
+			t.Fatal(err)
+		}
+		return ref
 	}
-	for len(s) < 6 {
-		s = "0" + s
+
+	cases := []struct {
+		name          string
+		setup         func(o *fakeOrderService, r *fakePaymentRepo) string // returns reference
+		newStatus     string
+		wantErrIs     error
+		wantOrderTxn  string // expected order status after; empty means no txn
+		wantPayStatus string // expected payment status after successful application
+	}{
+		{
+			name: "paid transition applies to payment and order",
+			setup: func(o *fakeOrderService, r *fakePaymentRepo) string {
+				return seed(o, r, uuid.New(), StatusPending)
+			},
+			newStatus:     StatusPaid,
+			wantOrderTxn:  order.StatusPaid,
+			wantPayStatus: StatusPaid,
+		},
+		{
+			name: "failed transition applies to payment and order",
+			setup: func(o *fakeOrderService, r *fakePaymentRepo) string {
+				return seed(o, r, uuid.New(), StatusPending)
+			},
+			newStatus:     StatusFailed,
+			wantOrderTxn:  order.StatusPaymentFailed,
+			wantPayStatus: StatusFailed,
+		},
+		{
+			name: "duplicate callback in same terminal state is idempotent",
+			setup: func(o *fakeOrderService, r *fakePaymentRepo) string {
+				return seed(o, r, uuid.New(), StatusPaid) // already paid
+			},
+			newStatus:     StatusPaid,
+			wantPayStatus: StatusPaid, // unchanged, no error
+		},
+		{
+			name: "transition from paid to failed is rejected",
+			setup: func(o *fakeOrderService, r *fakePaymentRepo) string {
+				return seed(o, r, uuid.New(), StatusPaid)
+			},
+			newStatus: StatusFailed,
+			wantErrIs: ErrInvalidStatusTransition,
+		},
+		{
+			name: "unsupported target status is rejected",
+			setup: func(o *fakeOrderService, r *fakePaymentRepo) string {
+				return seed(o, r, uuid.New(), StatusPending)
+			},
+			newStatus: "cancelled",
+			wantErrIs: ErrInvalidStatusTransition,
+		},
+		{
+			name: "unknown reference returns not found",
+			setup: func(_ *fakeOrderService, _ *fakePaymentRepo) string {
+				return "PAY-DOES-NOT-EXIST"
+			},
+			newStatus: StatusPaid,
+			wantErrIs: ErrPaymentNotFound,
+		},
+		{
+			name: "repository failure on lookup surfaces",
+			setup: func(_ *fakeOrderService, r *fakePaymentRepo) string {
+				r.getErr = repoBoom
+				return "PAY-000001"
+			},
+			newStatus: StatusPaid,
+			wantErrIs: repoBoom,
+		},
+		{
+			name: "repository failure on update surfaces",
+			setup: func(o *fakeOrderService, r *fakePaymentRepo) string {
+				ref := seed(o, r, uuid.New(), StatusPending)
+				r.updateErr = repoBoom
+				return ref
+			},
+			newStatus: StatusPaid,
+			wantErrIs: repoBoom,
+		},
 	}
-	return s
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			orders := newFakeOrderService()
+			repo := newFakePaymentRepo()
+			ref := tc.setup(orders, repo)
+			svc := NewService(repo, orders, &stubGateway{})
+
+			got, err := svc.ApplyProviderCallback(context.Background(), ref, tc.newStatus)
+
+			if tc.wantErrIs != nil {
+				if !errors.Is(err, tc.wantErrIs) {
+					t.Fatalf("err = %v, want errors.Is(_, %v)", err, tc.wantErrIs)
+				}
+				if len(orders.updates) != 0 {
+					t.Errorf("order was mutated on error path: %+v", orders.updates)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("err = %v, want nil", err)
+			}
+			if got == nil {
+				t.Fatal("got nil payment on success")
+			}
+			if got.Status != tc.wantPayStatus {
+				t.Errorf("payment.Status = %q, want %q", got.Status, tc.wantPayStatus)
+			}
+			if tc.wantOrderTxn != "" {
+				if len(orders.updates) != 1 {
+					t.Fatalf("order updates = %d, want 1", len(orders.updates))
+				}
+				if orders.updates[0].status != tc.wantOrderTxn {
+					t.Errorf("order status = %q, want %q", orders.updates[0].status, tc.wantOrderTxn)
+				}
+			} else {
+				// Idempotent case: no txn expected.
+				if len(orders.updates) != 0 {
+					t.Errorf("order mutated on idempotent path: %+v", orders.updates)
+				}
+			}
+		})
+	}
 }

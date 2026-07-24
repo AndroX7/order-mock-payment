@@ -19,6 +19,7 @@ const defaultCurrency = "USD"
 type OrderService interface {
 	Get(ctx context.Context, userID, orderID uuid.UUID) (*order.Order, error)
 	UpdateStatus(ctx context.Context, userID, orderID uuid.UUID, status string) error
+	AdvanceStatus(ctx context.Context, orderID uuid.UUID, status string) error
 }
 
 // Service orchestrates payment creation and retrieval. It owns ownership
@@ -78,6 +79,43 @@ func (s *Service) Create(ctx context.Context, userID, orderID uuid.UUID) (*Payme
 
 	if err := s.orders.UpdateStatus(ctx, userID, o.ID, order.StatusPendingPayment); err != nil {
 		return nil, fmt.Errorf("update order status: %w", err)
+	}
+	return p, nil
+}
+
+// ApplyProviderCallback applies a provider status notification to the
+// referenced payment and cascades the order status. Idempotent: a callback
+// whose newStatus already matches current status is a no-op success.
+//
+// Only pending → paid and pending → failed are allowed. Any other
+// transition returns ErrInvalidStatusTransition. Unknown references
+// return ErrPaymentNotFound.
+func (s *Service) ApplyProviderCallback(ctx context.Context, reference, newStatus string) (*Payment, error) {
+	if newStatus != StatusPaid && newStatus != StatusFailed {
+		return nil, ErrInvalidStatusTransition
+	}
+	p, err := s.repo.GetByProviderReference(ctx, reference)
+	if err != nil {
+		return nil, err
+	}
+	// Idempotent: duplicate callback in the same terminal state is not an error.
+	if p.Status == newStatus {
+		return p, nil
+	}
+	if p.Status != StatusPending {
+		return nil, ErrInvalidStatusTransition
+	}
+	if err := s.repo.UpdateStatus(ctx, p.ID, newStatus); err != nil {
+		return nil, err
+	}
+	p.Status = newStatus
+
+	orderStatus := order.StatusPaid
+	if newStatus == StatusFailed {
+		orderStatus = order.StatusPaymentFailed
+	}
+	if err := s.orders.AdvanceStatus(ctx, p.OrderID, orderStatus); err != nil {
+		return nil, fmt.Errorf("advance order status: %w", err)
 	}
 	return p, nil
 }

@@ -19,6 +19,7 @@ type Repository interface {
 	List(ctx context.Context, userID uuid.UUID) ([]*Order, error)
 	Update(ctx context.Context, o *Order) error
 	UpdateStatus(ctx context.Context, userID, orderID uuid.UUID, status string) error
+	AdvanceStatus(ctx context.Context, orderID uuid.UUID, status string) error
 	Delete(ctx context.Context, userID, orderID uuid.UUID) error
 }
 
@@ -127,6 +128,31 @@ func (r *PostgresRepository) UpdateStatus(ctx context.Context, userID, orderID u
 	n, err := res.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("update order status rows affected: %w", err)
+	}
+	if n == 0 {
+		return ErrOrderNotFound
+	}
+	return nil
+}
+
+const advanceOrderStatusQuery = `
+UPDATE orders
+SET status = $1, updated_at = now()
+WHERE id = $2
+`
+
+// AdvanceStatus mutates status without an ownership filter. Intended for
+// system-initiated transitions (webhook → payment → order) where the
+// caller has already established authorization via provider signature.
+// Returns ErrOrderNotFound if the row does not exist.
+func (r *PostgresRepository) AdvanceStatus(ctx context.Context, orderID uuid.UUID, status string) error {
+	res, err := r.db.ExecContext(ctx, advanceOrderStatusQuery, status, orderID)
+	if err != nil {
+		return fmt.Errorf("advance order status: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("advance order status rows affected: %w", err)
 	}
 	if n == 0 {
 		return ErrOrderNotFound

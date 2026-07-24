@@ -12,6 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
+	"github.com/claudiovaldi/order-mock-payment/internal/httpresp"
 )
 
 func TestMain(m *testing.M) {
@@ -88,14 +90,14 @@ func TestSignupHandler(t *testing.T) {
 			body:        `{"email":"alice@example.com","passwo`,
 			contentType: "application/json",
 			wantStatus:  http.StatusBadRequest,
-			wantCode:    CodeInvalidRequest,
+			wantCode:    httpresp.CodeInvalidRequest,
 		},
 		{
 			name:        "unsupported Content-Type",
 			body:        validBody,
 			contentType: "text/plain",
 			wantStatus:  http.StatusUnsupportedMediaType,
-			wantCode:    CodeInvalidContentType,
+			wantCode:    httpresp.CodeInvalidContentType,
 		},
 		{
 			name:        "internal service error",
@@ -103,7 +105,7 @@ func TestSignupHandler(t *testing.T) {
 			contentType: "application/json",
 			setupRepo:   func(r *fakeRepo) { r.createErr = errors.New("db down") },
 			wantStatus:  http.StatusInternalServerError,
-			wantCode:    CodeInternalError,
+			wantCode:    httpresp.CodeInternalError,
 		},
 	}
 
@@ -281,14 +283,14 @@ func TestLoginHandler(t *testing.T) {
 			body:        `{"email":"alice@example.com","passw`,
 			contentType: "application/json",
 			wantStatus:  http.StatusBadRequest,
-			wantCode:    CodeInvalidRequest,
+			wantCode:    httpresp.CodeInvalidRequest,
 		},
 		{
 			name:        "unsupported Content-Type",
 			body:        validBody,
 			contentType: "text/plain",
 			wantStatus:  http.StatusUnsupportedMediaType,
-			wantCode:    CodeInvalidContentType,
+			wantCode:    httpresp.CodeInvalidContentType,
 		},
 		{
 			name:        "repository error",
@@ -296,7 +298,7 @@ func TestLoginHandler(t *testing.T) {
 			contentType: "application/json",
 			setupRepo:   func(r *fakeRepo) { r.getErr = errors.New("db down") },
 			wantStatus:  http.StatusInternalServerError,
-			wantCode:    CodeInternalError,
+			wantCode:    httpresp.CodeInternalError,
 		},
 		{
 			name:        "token issuer error",
@@ -305,7 +307,7 @@ func TestLoginHandler(t *testing.T) {
 			setupRepo:   seedUser,
 			issuer:      stubIssuer{err: errors.New("sign failure")},
 			wantStatus:  http.StatusInternalServerError,
-			wantCode:    CodeInternalError,
+			wantCode:    httpresp.CodeInternalError,
 		},
 	}
 

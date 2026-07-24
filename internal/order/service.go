@@ -104,6 +104,13 @@ func (s *Service) UpdateStatus(ctx context.Context, userID, orderID uuid.UUID, s
 	return s.repo.UpdateStatus(ctx, userID, orderID, status)
 }
 
+// AdvanceStatus mutates status without an ownership filter. Callers
+// (webhook flows) must have established authorization via other means
+// (e.g. provider signature).
+func (s *Service) AdvanceStatus(ctx context.Context, orderID uuid.UUID, status string) error {
+	return s.repo.AdvanceStatus(ctx, orderID, status)
+}
+
 // --- validation ---
 
 func validateSymbol(s string) error {

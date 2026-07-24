@@ -106,6 +106,19 @@ func (r *fakeRepo) UpdateStatus(_ context.Context, userID, orderID uuid.UUID, st
 	return nil
 }
 
+func (r *fakeRepo) AdvanceStatus(_ context.Context, orderID uuid.UUID, status string) error {
+	if r.failErr != nil {
+		return r.failErr
+	}
+	o, ok := r.orders[orderID]
+	if !ok {
+		return ErrOrderNotFound
+	}
+	o.Status = status
+	o.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
 var _ Repository = (*fakeRepo)(nil)
 
 // --- helpers ---

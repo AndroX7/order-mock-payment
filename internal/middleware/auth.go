@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/claudiovaldi/order-mock-payment/internal/auth"
+	"github.com/claudiovaldi/order-mock-payment/internal/httpresp"
 )
 
 // TokenParser is the minimal parsing surface RequireAuth requires.
@@ -21,9 +22,6 @@ type TokenParser interface {
 
 // ClaimsContextKey is the gin.Context key under which validated Claims are stored.
 const ClaimsContextKey = "auth_claims"
-
-// CodeUnauthorized is the API error code returned when RequireAuth rejects a request.
-const CodeUnauthorized = "UNAUTHORIZED"
 
 var (
 	errMissingHeader = errors.New("missing Authorization header")
@@ -74,11 +72,6 @@ func extractBearer(header string) (string, error) {
 
 func unauthorized(c *gin.Context, log *slog.Logger, err error) {
 	log.Debug("auth rejected", "reason", err.Error(), "path", c.Request.URL.Path)
-	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-		"success": false,
-		"error": gin.H{
-			"code":    CodeUnauthorized,
-			"message": "authentication required",
-		},
-	})
+	c.Abort()
+	httpresp.Error(c, http.StatusUnauthorized, httpresp.CodeUnauthorized, "authentication required")
 }
