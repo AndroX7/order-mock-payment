@@ -1,8 +1,23 @@
-bin/
-tmp/
-*.env
-!.env.example
+# Binaries
+/bin/
+*.exe
+*.out
+
+# Coverage & test artifacts
+*.test
+coverage.out
+coverage.txt
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# Editors / OS
 .vscode/
 .idea/
-*.log
-coverage.out
+*.swp
+.DS_Store
+
+# Vendored deps (we use Go modules)
+vendor/

@@ -1,29 +1,33 @@
+// Command server is the composition root for the order-mock-payment service.
 package main
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/jmoiron/sqlx"
-	"github.com/redis/go-redis/v9"
-
-	"github.com/AndroX7/order-mock-payment/internal/cache"
-	"github.com/AndroX7/order-mock-payment/internal/config"
-	"github.com/AndroX7/order-mock-payment/internal/database"
-	"github.com/AndroX7/order-mock-payment/internal/logger"
+	"github.com/claudiovaldi/order-mock-payment/internal/auth"
+	"github.com/claudiovaldi/order-mock-payment/internal/cache"
+	"github.com/claudiovaldi/order-mock-payment/internal/config"
+	"github.com/claudiovaldi/order-mock-payment/internal/database"
+	"github.com/claudiovaldi/order-mock-payment/internal/logger"
+	"github.com/claudiovaldi/order-mock-payment/internal/middleware"
+	"github.com/claudiovaldi/order-mock-payment/internal/order"
+	"github.com/claudiovaldi/order-mock-payment/internal/payment"
+	"github.com/claudiovaldi/order-mock-payment/internal/server"
 )
+
+const startupTimeout = 30 * time.Second
+
+// version is injected at build time via -ldflags "-X main.version=...".
+var version = "dev"
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		slog.Error("startup failed", "error", err)
 		os.Exit(1)
 	}
 }
@@ -31,123 +35,78 @@ func main() {
 func run() error {
 	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("load config: %w", err)
+		return err
 	}
 
-	log := logger.New(cfg.Log.Level, cfg.Log.Format)
+	log := logger.New(cfg.App.Env, cfg.App.LogLevel)
 	slog.SetDefault(log)
 
-	log.Info("starting service",
-		slog.String("env", cfg.App.Env),
-		slog.Int("port", cfg.HTTP.Port),
-	)
-
+	// SIGINT/SIGTERM cancel this ctx, which drives graceful shutdown everywhere.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	initCtx, cancelInit := context.WithTimeout(ctx, 10*time.Second)
-	defer cancelInit()
+	// Bounded startup: init must succeed within startupTimeout or we fail fast.
+	// Derives from ctx so a shutdown signal during boot still cancels immediately.
+	startCtx, startCancel := context.WithTimeout(ctx, startupTimeout)
+	defer startCancel()
 
-	db, err := database.NewPostgres(initCtx, cfg.Postgres)
+	pg, err := database.New(startCtx, cfg.Postgres)
 	if err != nil {
-		return fmt.Errorf("init postgres: %w", err)
+		return err
 	}
 	defer func() {
-		if err := db.Close(); err != nil {
-			log.Error("postgres close", slog.Any("err", err))
+		if err := pg.Close(); err != nil {
+			log.Error("postgres close failed", "error", err)
 		}
 	}()
-	log.Info("postgres connected")
 
-	rdb, err := cache.NewRedis(initCtx, cfg.Redis)
+	rd, err := cache.New(startCtx, cfg.Redis)
 	if err != nil {
-		return fmt.Errorf("init redis: %w", err)
+		return err
 	}
 	defer func() {
-		if err := rdb.Close(); err != nil {
-			log.Error("redis close", slog.Any("err", err))
-		}
-	}()
-	log.Info("redis connected")
-
-	router := newRouter(cfg, db, rdb)
-
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.HTTP.Port),
-		Handler:      router,
-		ReadTimeout:  cfg.HTTP.ReadTimeout,
-		WriteTimeout: cfg.HTTP.WriteTimeout,
-		IdleTimeout:  cfg.HTTP.IdleTimeout,
-	}
-
-	serverErr := make(chan error, 1)
-	go func() {
-		log.Info("http server listening", slog.String("addr", srv.Addr))
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverErr <- err
+		if err := rd.Close(); err != nil {
+			log.Error("redis close failed", "error", err)
 		}
 	}()
 
-	select {
-	case err := <-serverErr:
-		return fmt.Errorf("http server: %w", err)
-	case <-ctx.Done():
-		log.Info("shutdown signal received")
-	}
+	// Startup complete — release the deadline timer eagerly.
+	startCancel()
 
-	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), cfg.HTTP.ShutdownTimeout)
-	defer cancelShutdown()
+	// Feature wiring. Pure struct composition, no I/O.
+	tokenSvc := auth.NewHMACTokenService(cfg.JWT.Secret, cfg.JWT.TTL)
+	authMW := middleware.RequireAuth(tokenSvc, log)
 
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Error("http shutdown", slog.Any("err", err))
-		return fmt.Errorf("shutdown: %w", err)
-	}
+	authRepo := auth.NewPostgresRepository(pg.DB)
+	authSvc := auth.NewService(authRepo, auth.BcryptHasher{}, tokenSvc)
+	authHandler := auth.NewHandler(authSvc)
 
-	log.Info("shutdown complete")
-	return nil
-}
+	orderRepo := order.NewPostgresRepository(pg.DB)
+	orderSvc := order.NewService(orderRepo)
+	orderHandler := order.NewHandler(orderSvc)
 
-func newRouter(cfg *config.Config, db *sqlx.DB, rdb *redis.Client) *gin.Engine {
-	if cfg.App.Env == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
+	paymentGateway := payment.NewMockGateway()
+	paymentRepo := payment.NewPostgresRepository(pg.DB)
+	paymentSvc := payment.NewService(paymentRepo, orderSvc, paymentGateway)
+	paymentHandler := payment.NewHandler(paymentSvc)
 
-	r := gin.New()
-	r.Use(gin.Recovery())
-
-	r.GET("/healthz", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	srv := server.New(server.Deps{
+		Config:         cfg,
+		Logger:         log,
+		Postgres:       pg,
+		Redis:          rd,
+		AuthHandler:    authHandler,
+		OrderHandler:   orderHandler,
+		PaymentHandler: paymentHandler,
+		AuthMiddleware: authMW,
+		Version:        version,
 	})
 
-	r.GET("/readyz", func(c *gin.Context) {
-		checkCtx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
-		defer cancel()
+	log.Info("server starting",
+		"env", cfg.App.Env,
+		"port", cfg.App.HTTPPort,
+		"version", version,
+	)
 
-		checks := map[string]string{}
-		ready := true
-
-		if err := db.PingContext(checkCtx); err != nil {
-			checks["postgres"] = "down"
-			ready = false
-			slog.Warn("readyz: postgres ping failed", slog.Any("err", err))
-		} else {
-			checks["postgres"] = "ok"
-		}
-
-		if err := rdb.Ping(checkCtx).Err(); err != nil {
-			checks["redis"] = "down"
-			ready = false
-			slog.Warn("readyz: redis ping failed", slog.Any("err", err))
-		} else {
-			checks["redis"] = "ok"
-		}
-
-		status := http.StatusOK
-		if !ready {
-			status = http.StatusServiceUnavailable
-		}
-		c.JSON(status, gin.H{"ready": ready, "checks": checks})
-	})
-
-	return r
+	return srv.Run(ctx)
 }

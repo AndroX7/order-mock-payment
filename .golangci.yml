@@ -1,46 +1,39 @@
+version: "2"
+
 run:
-  timeout: 5m
-  tests: true
+  timeout: 3m
 
 linters:
-  disable-all: true
+  default: none
   enable:
+    - bodyclose
     - errcheck
+    - errorlint
+    - gosec
     - govet
-    - staticcheck
-    - unused
     - ineffassign
+    - misspell
+    - nakedret
+    - revive
+    - sqlclosecheck
+    - staticcheck
+    - unparam
+    - unused
+  settings:
+    errcheck:
+      check-type-assertions: true
+    revive:
+      rules:
+        - name: exported
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+          - unparam
+
+formatters:
+  enable:
     - gofmt
     - goimports
-    - misspell
-    - revive
-    - gosec
-    - bodyclose
-    - contextcheck
-    - errorlint
-    - noctx
-    - sqlclosecheck
-    - nilerr
-    - unconvert
-
-linters-settings:
-  gosec:
-    excludes:
-      - G104
-  errcheck:
-    check-type-assertions: true
-    check-blank: false
-  revive:
-    rules:
-      - name: exported
-        disabled: true
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gosec
-        - errcheck
-        - noctx
-  max-issues-per-linter: 0
-  max-same-issues: 0

@@ -1,0 +1,357 @@
+package payment
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
+
+	"github.com/claudiovaldi/order-mock-payment/internal/order"
+)
+
+// --- test doubles ---
+
+// fakeOrderService satisfies payment.OrderService. It stores orders and
+// tracks status transitions so tests can assert them.
+type fakeOrderService struct {
+	orders    map[uuid.UUID]*order.Order
+	getErr    error
+	updateErr error
+	// updates records (userID, orderID, newStatus) for assertions.
+	updates []statusUpdate
+}
+
+type statusUpdate struct {
+	userID  uuid.UUID
+	orderID uuid.UUID
+	status  string
+}
+
+func newFakeOrderService() *fakeOrderService {
+	return &fakeOrderService{orders: map[uuid.UUID]*order.Order{}}
+}
+
+func (s *fakeOrderService) Get(_ context.Context, userID, orderID uuid.UUID) (*order.Order, error) {
+	if s.getErr != nil {
+		return nil, s.getErr
+	}
+	o, ok := s.orders[orderID]
+	if !ok || o.UserID != userID {
+		return nil, order.ErrOrderNotFound
+	}
+	cp := *o
+	return &cp, nil
+}
+
+func (s *fakeOrderService) UpdateStatus(_ context.Context, userID, orderID uuid.UUID, status string) error {
+	if s.updateErr != nil {
+		return s.updateErr
+	}
+	o, ok := s.orders[orderID]
+	if !ok || o.UserID != userID {
+		return order.ErrOrderNotFound
+	}
+	o.Status = status
+	s.updates = append(s.updates, statusUpdate{userID, orderID, status})
+	return nil
+}
+
+// seedOrder inserts an order into the fake with pending status.
+func (s *fakeOrderService) seedOrder(userID uuid.UUID, status string, qty, price string) *order.Order {
+	o := &order.Order{
+		ID:        uuid.New(),
+		UserID:    userID,
+		Symbol:    "BTCUSD",
+		Side:      order.SideBuy,
+		Quantity:  decimal.RequireFromString(qty),
+		Price:     decimal.RequireFromString(price),
+		Status:    status,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	s.orders[o.ID] = o
+	return o
+}
+
+// fakePaymentRepo — in-memory Repository. Mirrors the UNIQUE(order_id) constraint.
+type fakePaymentRepo struct {
+	payments  map[uuid.UUID]*Payment
+	byOrder   map[uuid.UUID]bool // simulates UNIQUE(order_id)
+	createErr error
+	getErr    error
+}
+
+func newFakePaymentRepo() *fakePaymentRepo {
+	return &fakePaymentRepo{
+		payments: map[uuid.UUID]*Payment{},
+		byOrder:  map[uuid.UUID]bool{},
+	}
+}
+
+func (r *fakePaymentRepo) Create(_ context.Context, p *Payment) error {
+	if r.createErr != nil {
+		return r.createErr
+	}
+	if r.byOrder[p.OrderID] {
+		return ErrDuplicatePayment
+	}
+	p.ID = uuid.New()
+	p.CreatedAt = time.Now().UTC()
+	p.UpdatedAt = p.CreatedAt
+	cp := *p
+	r.payments[p.ID] = &cp
+	r.byOrder[p.OrderID] = true
+	return nil
+}
+
+func (r *fakePaymentRepo) GetByID(_ context.Context, paymentID uuid.UUID) (*Payment, error) {
+	if r.getErr != nil {
+		return nil, r.getErr
+	}
+	p, ok := r.payments[paymentID]
+	if !ok {
+		return nil, ErrPaymentNotFound
+	}
+	cp := *p
+	return &cp, nil
+}
+
+// stubGateway returns canned responses.
+type stubGateway struct {
+	ref string
+	err error
+}
+
+func (g stubGateway) CreatePayment(_ context.Context, _ uuid.UUID, _ decimal.Decimal, _ string) (GatewayPayment, error) {
+	if g.err != nil {
+		return GatewayPayment{}, g.err
+	}
+	if g.ref == "" {
+		return GatewayPayment{Provider: "stub", Reference: "PAY-TEST-001"}, nil
+	}
+	return GatewayPayment{Provider: "stub", Reference: g.ref}, nil
+}
+
+var (
+	_ Repository     = (*fakePaymentRepo)(nil)
+	_ OrderService   = (*fakeOrderService)(nil)
+	_ PaymentGateway = stubGateway{}
+)
+
+// --- Create ---
+
+func TestCreate_Cases(t *testing.T) {
+	userA := uuid.New()
+	userB := uuid.New()
+	gatewayBoom := errors.New("gateway down")
+	repoBoom := errors.New("db down")
+
+	cases := []struct {
+		name         string
+		setup        func(orders *fakeOrderService, repo *fakePaymentRepo, gw *stubGateway) uuid.UUID // returns orderID to pay for
+		caller       uuid.UUID
+		wantErrIs    error
+		wantOrderTxn bool // whether order status should have been updated
+	}{
+		{
+			name: "success",
+			setup: func(o *fakeOrderService, _ *fakePaymentRepo, _ *stubGateway) uuid.UUID {
+				return o.seedOrder(userA, order.StatusPending, "2", "50").ID
+			},
+			caller:       userA,
+			wantOrderTxn: true,
+		},
+		{
+			name: "order not found",
+			setup: func(_ *fakeOrderService, _ *fakePaymentRepo, _ *stubGateway) uuid.UUID {
+				return uuid.New()
+			},
+			caller:    userA,
+			wantErrIs: ErrOrderNotFound,
+		},
+		{
+			name: "foreign order",
+			setup: func(o *fakeOrderService, _ *fakePaymentRepo, _ *stubGateway) uuid.UUID {
+				return o.seedOrder(userB, order.StatusPending, "1", "1").ID
+			},
+			caller:    userA,
+			wantErrIs: ErrOrderNotFound,
+		},
+		{
+			name: "order not payable",
+			setup: func(o *fakeOrderService, _ *fakePaymentRepo, _ *stubGateway) uuid.UUID {
+				return o.seedOrder(userA, order.StatusPendingPayment, "1", "1").ID
+			},
+			caller:    userA,
+			wantErrIs: ErrOrderNotPayable,
+		},
+		{
+			name: "duplicate payment",
+			setup: func(o *fakeOrderService, r *fakePaymentRepo, _ *stubGateway) uuid.UUID {
+				ord := o.seedOrder(userA, order.StatusPending, "1", "1")
+				r.byOrder[ord.ID] = true // pre-mark: unique constraint would reject a second insert
+				return ord.ID
+			},
+			caller:    userA,
+			wantErrIs: ErrDuplicatePayment,
+		},
+		{
+			name: "gateway failure",
+			setup: func(o *fakeOrderService, _ *fakePaymentRepo, gw *stubGateway) uuid.UUID {
+				gw.err = gatewayBoom
+				return o.seedOrder(userA, order.StatusPending, "1", "1").ID
+			},
+			caller:    userA,
+			wantErrIs: gatewayBoom,
+		},
+		{
+			name: "repository failure",
+			setup: func(o *fakeOrderService, r *fakePaymentRepo, _ *stubGateway) uuid.UUID {
+				r.createErr = repoBoom
+				return o.seedOrder(userA, order.StatusPending, "1", "1").ID
+			},
+			caller:    userA,
+			wantErrIs: repoBoom,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			orders := newFakeOrderService()
+			repo := newFakePaymentRepo()
+			gw := &stubGateway{}
+			orderID := tc.setup(orders, repo, gw)
+			svc := NewService(repo, orders, *gw)
+
+			got, err := svc.Create(context.Background(), tc.caller, orderID)
+
+			if tc.wantErrIs == nil {
+				if err != nil {
+					t.Fatalf("err = %v, want nil", err)
+				}
+				if got.ID == uuid.Nil {
+					t.Error("payment.ID not populated")
+				}
+				if got.Status != StatusPending {
+					t.Errorf("Status = %q, want %q", got.Status, StatusPending)
+				}
+				if !tc.wantOrderTxn {
+					return
+				}
+				if len(orders.updates) != 1 {
+					t.Fatalf("order updates = %d, want 1", len(orders.updates))
+				}
+				u := orders.updates[0]
+				if u.userID != tc.caller || u.orderID != orderID || u.status != order.StatusPendingPayment {
+					t.Errorf("bad status update: %+v", u)
+				}
+				return
+			}
+			if !errors.Is(err, tc.wantErrIs) {
+				t.Fatalf("err = %v, want errors.Is(_, %v)", err, tc.wantErrIs)
+			}
+			if got != nil {
+				t.Errorf("got payment on error: %+v", got)
+			}
+			// On error paths, order status must NOT have been mutated.
+			if len(orders.updates) != 0 {
+				t.Errorf("order status mutated on error path: %+v", orders.updates)
+			}
+		})
+	}
+}
+
+// --- Get ---
+
+func TestGet_Cases(t *testing.T) {
+	userA := uuid.New()
+	userB := uuid.New()
+
+	orders := newFakeOrderService()
+	repo := newFakePaymentRepo()
+	svc := NewService(repo, orders, &stubGateway{})
+
+	// Seed: user A owns order + payment.
+	ownedOrder := orders.seedOrder(userA, order.StatusPendingPayment, "1", "1")
+	ownedPayment := &Payment{OrderID: ownedOrder.ID, Provider: "stub", ProviderReference: "PAY-1",
+		Amount: decimal.RequireFromString("1"), Currency: "USD", Status: StatusPending}
+	if err := repo.Create(context.Background(), ownedPayment); err != nil {
+		t.Fatal(err)
+	}
+	// Seed: user B owns another order + payment.
+	otherOrder := orders.seedOrder(userB, order.StatusPendingPayment, "1", "1")
+	otherPayment := &Payment{OrderID: otherOrder.ID, Provider: "stub", ProviderReference: "PAY-2",
+		Amount: decimal.RequireFromString("1"), Currency: "USD", Status: StatusPending}
+	if err := repo.Create(context.Background(), otherPayment); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("owner fetches own payment", func(t *testing.T) {
+		got, err := svc.Get(context.Background(), userA, ownedPayment.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.ID != ownedPayment.ID {
+			t.Errorf("ID mismatch")
+		}
+	})
+
+	t.Run("non-owner sees not found", func(t *testing.T) {
+		_, err := svc.Get(context.Background(), userA, otherPayment.ID)
+		if !errors.Is(err, ErrPaymentNotFound) {
+			t.Errorf("err = %v, want ErrPaymentNotFound", err)
+		}
+	})
+
+	t.Run("unknown payment id", func(t *testing.T) {
+		_, err := svc.Get(context.Background(), userA, uuid.New())
+		if !errors.Is(err, ErrPaymentNotFound) {
+			t.Errorf("err = %v, want ErrPaymentNotFound", err)
+		}
+	})
+
+	t.Run("repository failure surfaces", func(t *testing.T) {
+		boom := errors.New("db down")
+		repo.getErr = boom
+		defer func() { repo.getErr = nil }()
+		_, err := svc.Get(context.Background(), userA, ownedPayment.ID)
+		if !errors.Is(err, boom) {
+			t.Errorf("err = %v, want %v", err, boom)
+		}
+	})
+}
+
+// --- MockGateway determinism ---
+
+func TestMockGateway_ReferencesAreSequential(t *testing.T) {
+	g := NewMockGateway()
+	for i := 1; i <= 3; i++ {
+		got, err := g.CreatePayment(context.Background(), uuid.New(), decimal.RequireFromString("1"), "USD")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := "PAY-" + zeroPad(i)
+		if got.Reference != want {
+			t.Errorf("iteration %d: got %q, want %q", i, got.Reference, want)
+		}
+		if got.Provider != mockProviderName {
+			t.Errorf("provider = %q, want %q", got.Provider, mockProviderName)
+		}
+	}
+}
+
+func zeroPad(n int) string {
+	// Local, matches the "%06d" format used by MockGateway.
+	s := ""
+	for n > 0 {
+		s = string(rune('0'+(n%10))) + s
+		n /= 10
+	}
+	for len(s) < 6 {
+		s = "0" + s
+	}
+	return s
+}

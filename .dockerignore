@@ -2,15 +2,18 @@
 .github
 .vscode
 .idea
+.claude
+
+bin/
+*.log
+coverage.out
+coverage.txt
+
 .env
 .env.*
-!.env.example
-bin/
-tmp/
-*.md
-!README.md
+
+# Not required inside the image
+Makefile
 docker-compose.yml
-Dockerfile
-.dockerignore
+.golangci.yml
 tests/
-summary.txt

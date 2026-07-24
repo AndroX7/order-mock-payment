@@ -1,3 +1,4 @@
+// Package logger builds the application's slog.Logger.
 package logger
 
 import (
@@ -6,23 +7,27 @@ import (
 	"strings"
 )
 
-func New(level, format string) *slog.Logger {
+// New returns a slog.Logger configured for the environment.
+//   - production  -> JSON handler (structured, ingest-friendly)
+//   - anything else -> text handler (human-readable)
+func New(env, level string) *slog.Logger {
+	isProd := strings.EqualFold(env, "production")
 	opts := &slog.HandlerOptions{
-		Level: parseLevel(level),
+		Level:     parseLevel(level),
+		AddSource: isProd,
 	}
 
-	var handler slog.Handler
-	if strings.EqualFold(format, "text") {
-		handler = slog.NewTextHandler(os.Stdout, opts)
+	var h slog.Handler
+	if isProd {
+		h = slog.NewJSONHandler(os.Stdout, opts)
 	} else {
-		handler = slog.NewJSONHandler(os.Stdout, opts)
+		h = slog.NewTextHandler(os.Stdout, opts)
 	}
-
-	return slog.New(handler)
+	return slog.New(h)
 }
 
 func parseLevel(s string) slog.Level {
-	switch strings.ToLower(s) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "debug":
 		return slog.LevelDebug
 	case "warn", "warning":

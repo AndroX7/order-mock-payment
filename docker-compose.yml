@@ -2,15 +2,15 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
       POSTGRES_DB: order_mock_payment
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d order_mock_payment"]
+      test: ["CMD-SHELL", "pg_isready -U app -d order_mock_payment"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -18,46 +18,56 @@ services:
   redis:
     image: redis:8-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
-      timeout: 5s
+      timeout: 3s
       retries: 10
 
+  migrate:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations
+    command:
+      - -path=/migrations
+      - -database=postgres://app:app@postgres:5432/order_mock_payment?sslmode=disable
+      - up
+    restart: "no"
+
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: dev
+    environment:
+      APP_ENV: production
+      HTTP_PORT: "8080"
+      LOG_LEVEL: info
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: order_mock_payment
+      POSTGRES_SSLMODE: disable
+      REDIS_ADDR: redis:6379
+      JWT_SECRET: dev-jwt-secret-do-not-use-in-prod-please-change-me
+      JWT_TTL: 24h
+    ports:
+      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    environment:
-      APP_ENV: production
-      HTTP_PORT: 8080
-      HTTP_READ_TIMEOUT: 10s
-      HTTP_WRITE_TIMEOUT: 10s
-      HTTP_IDLE_TIMEOUT: 60s
-      HTTP_SHUTDOWN_TIMEOUT: 30s
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: order_mock_payment
-      DB_SSLMODE: disable
-      DB_MAX_OPEN_CONNS: 25
-      DB_MAX_IDLE_CONNS: 5
-      DB_CONN_MAX_LIFETIME: 30m
-      DB_CONN_MAX_IDLE_TIME: 5m
-      REDIS_ADDR: redis:6379
-      REDIS_PASSWORD: ""
-      REDIS_DB: 0
-      LOG_LEVEL: info
-      LOG_FORMAT: json
-    ports:
-      - "8080:8080"
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
